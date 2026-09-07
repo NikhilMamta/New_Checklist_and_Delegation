@@ -206,15 +206,15 @@ const Setting = () => {
     try {
       setIsRefreshing(true);
       await Promise.all([
-        dispatch(userDetails()).unwrap().catch(() => {}),
-        dispatch(departmentDetails()).unwrap().catch(() => {}),
-        dispatch(givenByDetails()).unwrap().catch(() => {}),
-        dispatch(customDropdownDetails()).unwrap().catch(() => {}),
+        dispatch(userDetails()).unwrap().catch(() => { }),
+        dispatch(departmentDetails()).unwrap().catch(() => { }),
+        dispatch(givenByDetails()).unwrap().catch(() => { }),
+        dispatch(customDropdownDetails()).unwrap().catch(() => { }),
       ]);
       fetchDeviceLogsAndUpdateStatus();
       showToast("Data refreshed successfully!", "success");
     } catch (e) {
-      console.error("Refresh error:", e);
+      console.error("Refresh error :", e);
       showToast("Refreshed data.", "info");
     } finally {
       setTimeout(() => setIsRefreshing(false), 500);
@@ -1580,7 +1580,7 @@ const Setting = () => {
                               <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleColor(user?.role)}`}>
                                 {user?.role}
                               </span>
-                              
+
                               {/* Direct Interactive Toggle for Self-Assign */}
                               <button
                                 type="button"
@@ -1590,9 +1590,9 @@ const Setting = () => {
                                   console.log(`🔘 Toggling self-assign for ${user?.user_name} to ${newStatus}`);
                                   try {
                                     showToast(`${newStatus ? 'Enabling' : 'Disabling'} self-assign for ${user?.user_name}...`, "info");
-                                    await dispatch(updateUser({ 
-                                      id: user?.id, 
-                                      updatedUser: { ...user, can_self_assign: newStatus } 
+                                    await dispatch(updateUser({
+                                      id: user?.id,
+                                      updatedUser: { ...user, can_self_assign: newStatus }
                                     })).unwrap();
                                     showToast(`Self-assign ${newStatus ? 'enabled' : 'disabled'} for ${user?.user_name}`, "success");
                                     dispatch(userDetails());
@@ -1601,11 +1601,10 @@ const Setting = () => {
                                     showToast("Failed to update self-assign rights", "error");
                                   }
                                 }}
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border transition-all cursor-pointer select-none hover:scale-105 active:scale-95 ${
-                                  user?.can_self_assign 
-                                    ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-sm hover:bg-purple-100' 
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border transition-all cursor-pointer select-none hover:scale-105 active:scale-95 ${user?.can_self_assign
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-sm hover:bg-purple-100'
                                     : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
-                                }`}
+                                  }`}
                                 title="Click to toggle self-assign rights directly"
                               >
                                 <div className={`w-1.5 h-1.5 rounded-full ${user?.can_self_assign ? 'bg-purple-600 animate-pulse' : 'bg-gray-400'}`}></div>
@@ -1682,9 +1681,9 @@ const Setting = () => {
                                     const newStatus = !user?.can_self_assign;
                                     try {
                                       showToast(`${newStatus ? 'Enabling' : 'Disabling'} self-assign for ${user?.user_name}...`, "info");
-                                      await dispatch(updateUser({ 
-                                        id: user?.id, 
-                                        updatedUser: { ...user, can_self_assign: newStatus } 
+                                      await dispatch(updateUser({
+                                        id: user?.id,
+                                        updatedUser: { ...user, can_self_assign: newStatus }
                                       })).unwrap();
                                       showToast(`Self-assign ${newStatus ? 'enabled' : 'disabled'} for ${user?.user_name}`, "success");
                                       dispatch(userDetails());
@@ -1693,11 +1692,10 @@ const Setting = () => {
                                       showToast("Failed to update self-assign rights", "error");
                                     }
                                   }}
-                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter border transition-all cursor-pointer select-none active:scale-95 ${
-                                    user?.can_self_assign 
-                                      ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-sm' 
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter border transition-all cursor-pointer select-none active:scale-95 ${user?.can_self_assign
+                                      ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-sm'
                                       : 'bg-gray-100 text-gray-500 border-gray-200'
-                                  }`}
+                                    }`}
                                   title="Click to toggle self-assign"
                                 >
                                   <div className={`w-1 h-1 rounded-full ${user?.can_self_assign ? 'bg-purple-600 animate-pulse' : 'bg-gray-400'}`}></div>
@@ -2030,15 +2028,15 @@ const Setting = () => {
                                                 <div className="flex gap-1.5 ml-1 opacity-100 lg:opacity-0 group-hover/part:opacity-100 transition-opacity">
                                                   <label className="text-blue-400 hover:text-blue-600 cursor-pointer flex items-center justify-center p-0.5" title="Edit part image">
                                                     <Edit size={12} />
-                                                    <input 
-                                                      type="file" 
-                                                      accept="image/*" 
-                                                      className="hidden" 
+                                                    <input
+                                                      type="file"
+                                                      accept="image/*"
+                                                      className="hidden"
                                                       onChange={(e) => {
                                                         const file = e.target.files[0];
-                                                        if(file) handleUpdatePartImage(file, part);
+                                                        if (file) handleUpdatePartImage(file, part);
                                                         e.target.value = null;
-                                                      }} 
+                                                      }}
                                                     />
                                                   </label>
                                                   <button
@@ -2128,15 +2126,15 @@ const Setting = () => {
                                           <div className="flex gap-1.5 ml-1">
                                             <label className="text-blue-400 hover:text-blue-600 cursor-pointer p-0.5 flex items-center justify-center">
                                               <Edit size={12} />
-                                              <input 
-                                                type="file" 
-                                                accept="image/*" 
-                                                className="hidden" 
+                                              <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
                                                 onChange={(e) => {
                                                   const file = e.target.files[0];
-                                                  if(file) handleUpdatePartImage(file, part);
+                                                  if (file) handleUpdatePartImage(file, part);
                                                   e.target.value = null;
-                                                }} 
+                                                }}
                                               />
                                             </label>
                                             <button
@@ -2439,46 +2437,42 @@ const Setting = () => {
                     )}
 
                   </div>
-                  
+
                   {/* Self-Assign Rights in Dedicated Standalone Card */}
-                  <div 
+                  <div
                     onClick={() => {
                       const nextVal = !userForm.can_self_assign;
                       setUserForm(prev => ({ ...prev, can_self_assign: nextVal }));
                     }}
-                    className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between select-none ${
-                      userForm.can_self_assign 
-                        ? 'bg-purple-50/90 border-purple-300 shadow-md shadow-purple-100/50' 
+                    className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between select-none ${userForm.can_self_assign
+                        ? 'bg-purple-50/90 border-purple-300 shadow-md shadow-purple-100/50'
                         : 'bg-gray-50 border-gray-200 hover:bg-gray-100/80'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3.5">
-                      <div className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all ${
-                        userForm.can_self_assign 
-                          ? 'bg-purple-600 text-white shadow-md shadow-purple-200' 
+                      <div className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all ${userForm.can_self_assign
+                          ? 'bg-purple-600 text-white shadow-md shadow-purple-200'
                           : 'bg-white text-gray-400 border border-gray-200'
-                      }`}>
+                        }`}>
                         <User size={20} strokeWidth={2.5} />
                       </div>
                       <div>
-                        <h4 className={`text-sm font-black uppercase tracking-wider mb-0.5 ${
-                          userForm.can_self_assign ? 'text-purple-900' : 'text-gray-700'
-                        }`}>
+                        <h4 className={`text-sm font-black uppercase tracking-wider mb-0.5 ${userForm.can_self_assign ? 'text-purple-900' : 'text-gray-700'
+                          }`}>
                           Self-Assign Rights
                         </h4>
                         <p className="text-[11px] text-gray-500 font-medium">
-                          {userForm.can_self_assign 
-                            ? '✅ Enabled: User can assign tasks to themselves' 
+                          {userForm.can_self_assign
+                            ? '✅ Enabled: User can assign tasks to themselves'
                             : '❌ Disabled: User cannot assign tasks to themselves'}
                         </p>
                       </div>
                     </div>
 
                     {/* Toggle Button */}
-                    <div 
-                      className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${
-                        userForm.can_self_assign ? 'bg-purple-600 justify-end' : 'bg-gray-300 justify-start'
-                      }`}
+                    <div
+                      className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${userForm.can_self_assign ? 'bg-purple-600 justify-end' : 'bg-gray-300 justify-start'
+                        }`}
                     >
                       <div className="bg-white w-4 h-4 rounded-full shadow-md transform transition-transform" />
                     </div>
