@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-    ClipboardList, Calendar, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, FileCheck, Play, Pause, ExternalLink
+    ClipboardList, Calendar, X, Mic, Square, Trash2, Plus, Save, Loader2, CheckCircle2, Clock, FileCheck, Play, Pause, ExternalLink, ChevronDown
 } from "lucide-react";
 import { ReactMediaRecorder } from "react-media-recorder";
 import AdminLayout from "../../components/layout/AdminLayout";
@@ -137,37 +137,43 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
                             Department <span className="text-red-500">*</span>
                         </label>
-                        <select
-                            name="department"
-                            value={task.department}
-                            onChange={(e) => {
-                                onUpdate(task.id, { department: e.target.value, doer: "" });
-                                dispatch(uniqueDoerNameData(e.target.value));
-                            }}
-                            className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
-                        >
-                            <option value="">Select Department</option>
-                            {department.map((d, i) => (
-                                <option key={i} value={typeof d === 'string' ? d : d.department}>
-                                    {typeof d === 'string' ? d : d.department}
-                                </option>
-                            ))}
-                        </select>
+                        <div className="relative">
+                            <select
+                                name="department"
+                                value={task.department}
+                                onChange={(e) => {
+                                    onUpdate(task.id, { department: e.target.value, doer: "" });
+                                    dispatch(uniqueDoerNameData(e.target.value));
+                                }}
+                                className="w-full appearance-none px-3 py-2.5 pr-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm cursor-pointer"
+                            >
+                                <option value="">Select Department</option>
+                                {department.map((d, i) => (
+                                    <option key={i} value={typeof d === 'string' ? d : d.department}>
+                                        {typeof d === 'string' ? d : d.department}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
                     </div>
                     <div>
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
                             Assign From <span className="text-red-500">*</span>
                         </label>
-                        <select
-                            name="givenBy"
-                            value={task.givenBy}
-                            onChange={handleChange}
-                            disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin"))}
-                            className={`w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm ${(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
-                        >
-                            <option value="">Select Assign From</option>
-                            {givenBy.map((g, i) => <option key={i} value={g}>{g}</option>)}
-                        </select>
+                        <div className="relative">
+                            <select
+                                name="givenBy"
+                                value={task.givenBy}
+                                onChange={handleChange}
+                                disabled={(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin"))}
+                                className={`w-full appearance-none px-3 py-2.5 pr-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm cursor-pointer ${(localStorage.getItem("role")?.toUpperCase() === "HOD" || (localStorage.getItem("role")?.toLowerCase() === "admin" && localStorage.getItem("user-name")?.toLowerCase() !== "admin")) ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
+                                <option value="">Select Assign From</option>
+                                {givenBy.map((g, i) => <option key={i} value={g}>{g}</option>)}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
                     </div>
                 </div>
 
@@ -176,19 +182,22 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                     <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">
                         Doer's Name <span className="text-red-500">*</span>
                     </label>
-                    <select
-                        name="doer"
-                        value={task.doer}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm"
-                    >
-                        <option value="">Select Doer</option>
-                        {getFilteredDoers().map((d, i) => (
-                            <option key={i} value={typeof d === 'string' ? d : d.user_name}>
-                                {typeof d === 'string' ? d : d.user_name}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="relative">
+                        <select
+                            name="doer"
+                            value={task.doer}
+                            onChange={handleChange}
+                            className="w-full appearance-none px-3 py-2.5 pr-8 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all text-sm cursor-pointer"
+                        >
+                            <option value="">Select Doer</option>
+                            {getFilteredDoers().map((d, i) => (
+                                <option key={i} value={typeof d === 'string' ? d : d.user_name}>
+                                    {typeof d === 'string' ? d : d.user_name}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
                 </div>
 
                 {/* Description, Reference & Voice Note */}
@@ -360,15 +369,18 @@ function TaskCard({ task, index, total, department, doerName, givenBy, dispatch,
                         />
                     </div>                    <div>
                         <label className="block text-xs font-bold text-gray-600 mb-1.5 uppercase tracking-wide">Frequency</label>
-                        <select
-                            name="frequency"
-                            value={task.frequency}
-                            onChange={handleChange}
-                            disabled={task.frequencyLocked}
-                            className={`w-full px-3 py-2.5 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-xs ${task.frequencyLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
-                        >
-                            {FREQUENCY_OPTIONS.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
-                        </select>
+                        <div className="relative">
+                            <select
+                                name="frequency"
+                                value={task.frequency}
+                                onChange={handleChange}
+                                disabled={task.frequencyLocked}
+                                className={`w-full appearance-none px-3 py-2.5 pr-8 border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-purple-500 outline-none transition-all text-xs cursor-pointer ${task.frequencyLocked ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            >
+                                {FREQUENCY_OPTIONS.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
+                            </select>
+                            <ChevronDown className="w-4 h-4 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        </div>
                     </div>
 
                     <div>
@@ -441,6 +453,7 @@ export default function ChecklistTask() {
         fetchHolidays();
         dispatch(uniqueDepartmentData());
         dispatch(uniqueGivenByData());
+        dispatch(uniqueDoerNameData());
         dispatch(customDropdownDetails());
 
         // Handle URL parameters for pre-filling

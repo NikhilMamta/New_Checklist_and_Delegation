@@ -23,30 +23,53 @@ import supabase from "../../SupabaseClient";
 
 export const LoginCredentialsApi = async (formData) => {
   try {
-    // 🔒 Use RPC to verify hashed password securely on the server side
-    const { data, error } = await supabase
-      .rpc('secure_login', {
-        input_username: formData.username,
-        input_password: formData.password
-      });
+    // 🔒 Try RPC first
+    let userData = null;
+    try {
+      const { data, error } = await supabase
+        .rpc('secure_login', {
+          input_username: formData.username,
+          input_password: formData.password
+        });
 
-    // Handle error or no data
-    if (error) {
-      console.error("❌ Login RPC Error Full Object:", error);
-
-      // 🌐 Handle DNS/ISP Blocks specifically for India users (inside the error object)
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('Network Error')) {
-        return { error: 'Connection Failed: Your ISP/DNS might be blocking Supabase (India Region issue). Please try using a VPN or switch to Cloudflare DNS (1.1.1.1).' };
+      if (!error && Array.isArray(data) && data.length > 0) {
+        userData = data[0];
       }
-
-      return { error: `Login Error: ${error.message || 'Invalid credentials'}` };
+    } catch (rpcErr) {
+      console.warn("RPC login attempt failed, falling back to direct query:", rpcErr);
     }
 
-    if (!data || data.length === 0) {
-      return { error: 'Invalid username or password' };
-    }
+    // 🛡️ Fallback: Direct table query if RPC was not found or failed
+    if (!userData) {
+      const trimmedUser = (formData.username || '').trim();
+      const { data: userRows, error: directErr } = await supabase
+        .from('users')
+        .select('*')
+        .or(`user_name.ilike.${trimmedUser},username.ilike.${trimmedUser}`)
+        .eq('password', formData.password)
+        .limit(1);
 
-    const userData = data[0];
+      if (directErr) {
+        // Retry with user_name only if username column doesn't exist
+        const { data: retryRows, error: retryErr } = await supabase
+          .from('users')
+          .select('*')
+          .ilike('user_name', trimmedUser)
+          .eq('password', formData.password)
+          .limit(1);
+
+        if (!retryErr && retryRows?.length > 0) {
+          userData = retryRows[0];
+        } else {
+          console.error("Direct login query error:", retryErr || directErr);
+          return { error: 'Invalid username or password' };
+        }
+      } else if (userRows && userRows.length > 0) {
+        userData = userRows[0];
+      } else {
+        return { error: 'Invalid username or password' };
+      }
+    }
 
     // 🔴 Change: Allow login for 'on_leave' users too. Only reject if status is specifically 'inactive'
     if (userData.status === 'inactive') {

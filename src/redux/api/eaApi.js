@@ -324,14 +324,56 @@ export const rejectEATask = async (id, doneId, reason) => {
 
 export const fetchApprovedEA = async () => {
     try {
-        const { data, error } = await supabase
-            .from('ea_tasks')
+        const { data: doneData, error: doneError } = await supabase
+            .from('ea_tasks_done')
             .select('*')
-            .eq('admin_done', true)
-            .order('updated_at', { ascending: false });
+            .or('admin_done.eq.true,status.eq.done,status.eq.rejected')
+            .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        return (data || []).map(row => ({ ...row, id: row.task_id, department: "EA" }));
+        if (doneError) {
+            console.warn("fetchApprovedEA doneError, falling back to ea_tasks:", doneError);
+            const { data, error } = await supabase
+                .from('ea_tasks')
+                .select('*')
+                .eq('admin_done', true);
+            if (error) throw error;
+            return (data || []).map((row, idx) => ({ ...row, id: row.task_id || row.id || `ea-${idx}`, department: "EA" }));
+        }
+
+        if (!doneData || doneData.length === 0) {
+            // Also check ea_tasks with admin_done = true as fallback
+            const { data: directTasks } = await supabase
+                .from('ea_tasks')
+                .select('*')
+                .eq('admin_done', true);
+            return (directTasks || []).map((row, idx) => ({ ...row, id: row.task_id || row.id || `ea-${idx}`, department: "EA" }));
+        }
+
+        const taskIds = doneData.map(d => d.task_id).filter(id => Boolean(id));
+        let taskDetails = [];
+        if (taskIds.length > 0) {
+            const { data: details } = await supabase
+                .from('ea_tasks')
+                .select('*')
+                .in('task_id', taskIds);
+            if (details) taskDetails = details;
+        }
+
+        return doneData.map((doneItem, idx) => {
+            const detail = taskDetails.find(t => t.task_id === doneItem.task_id) || {};
+            return {
+                ...detail,
+                ...doneItem,
+                doer_name: doneItem.doer_name || detail?.doer_name,
+                remarks: doneItem.reason || detail?.remarks,
+                planned_date: (doneItem.status?.toLowerCase() === 'extended' || doneItem.status?.toLowerCase() === 'extend')
+                    ? (doneItem.next_extend_date || detail?.planned_date)
+                    : (doneItem.planned_date || detail?.planned_date),
+                id: doneItem.id || doneItem.task_id || `ea-done-${idx}`,
+                task_id: doneItem.task_id || detail?.task_id,
+                department: "EA"
+            };
+        });
     } catch (error) {
         console.error("Error fetching approved EA tasks:", error);
         return [];

@@ -11,6 +11,7 @@ const getYouTubeId = (url) => {
 };
 
 const MediaViewer = ({ isOpen, onClose, media }) => {
+    if (!isOpen) return null;
     const isYoutube = media.type === 'youtube';
     const isVideo = media.type === 'video';
     const isImage = media.type.startsWith('image') || media.type === 'image';
@@ -18,8 +19,7 @@ const MediaViewer = ({ isOpen, onClose, media }) => {
 
     return (
         <AnimatePresence>
-            {isOpen && (
-                <div key="media-viewer-container" className="fixed inset-0 z-[10000] flex items-center justify-center p-4 md:p-8">
+            <div key="media-viewer-container" className="fixed inset-0 z-[10000] flex items-center justify-center p-4 md:p-8">
                     <motion.div 
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -123,7 +123,6 @@ const MediaViewer = ({ isOpen, onClose, media }) => {
                         </div>
                     </motion.div>
                 </div>
-            )}
         </AnimatePresence>
     );
 };

@@ -202,8 +202,23 @@ const Setting = () => {
 
 
   // Add manual refresh button handler
-  const handleManualRefresh = () => {
-    fetchDeviceLogsAndUpdateStatus();
+  const handleManualRefresh = async () => {
+    try {
+      setIsRefreshing(true);
+      await Promise.all([
+        dispatch(userDetails()).unwrap().catch(() => {}),
+        dispatch(departmentDetails()).unwrap().catch(() => {}),
+        dispatch(givenByDetails()).unwrap().catch(() => {}),
+        dispatch(customDropdownDetails()).unwrap().catch(() => {}),
+      ]);
+      fetchDeviceLogsAndUpdateStatus();
+      showToast("Data refreshed successfully!", "success");
+    } catch (e) {
+      console.error("Refresh error:", e);
+      showToast("Refreshed data.", "info");
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
   };
 
   const handleUsernameFilterSelect = (username) => {
@@ -1014,52 +1029,76 @@ const Setting = () => {
   return (
     <AdminLayout>
       <div className="space-y-8">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 py-6">
-          <h1 className="text-2xl font-bold text-purple-600">User Management System</h1>
+        {/* Header and Controls: Cleanly Separated Divs / Cards */}
+        <div className="space-y-4">
+          {/* Top Header Title */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-4">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-7 sm:h-8 bg-purple-600 rounded-full" />
+              <div>
+                <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">
+                  User <span className="text-purple-600">Management System</span>
+                </h1>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 hidden sm:block">
+              Manage system users, departments, leave schedules, and machine assets
+            </p>
+          </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex bg-gray-100/80 p-1 rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-max xscrol">
-              {[
-                { id: 'users', label: 'Users', icon: User },
-                { id: 'departments', label: 'Departments', icon: Building, action: () => { dispatch(departmentDetails()); dispatch(givenByDetails()); } },
-                { id: 'leave', label: 'Leave', icon: Calendar },
-                { id: 'categories', label: 'Machines', icon: Settings },
-              ].map((tab) => (
+          {/* Dedicated Div 1: Category / Module Navigation Tabs in Individual Divs */}
+          <div className="w-full flex flex-wrap items-center gap-2 sm:gap-3">
+            {[
+              { id: 'users', label: 'Users', icon: User, color: 'bg-purple-600 text-white shadow-md shadow-purple-200 ring-2 ring-purple-400/20' },
+              { id: 'departments', label: 'Departments', icon: Building, color: 'bg-indigo-600 text-white shadow-md shadow-indigo-200 ring-2 ring-indigo-400/20', action: () => { dispatch(departmentDetails()); dispatch(givenByDetails()); } },
+              { id: 'leave', label: 'Leave', icon: Calendar, color: 'bg-amber-600 text-white shadow-md shadow-amber-200 ring-2 ring-amber-400/20' },
+              { id: 'categories', label: 'Machines', icon: Settings, color: 'bg-emerald-600 text-white shadow-md shadow-emerald-200 ring-2 ring-emerald-400/20' },
+            ].map((tab) => (
+              <div key={tab.id} className="bg-white p-1 rounded-2xl border border-gray-100 shadow-sm flex items-center">
                 <button
-                  key={tab.id}
-                  className={`relative flex items-center justify-center gap-2 py-2 px-6 rounded-lg text-xs font-bold transition-all duration-500 whitespace-nowrap min-w-[110px] z-10 ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-purple-600'}`}
+                  type="button"
                   onClick={() => {
-                    handleTabChange(tab.id);
+                    console.log(`📌 Tab Clicked: ${tab.label} (${tab.id})`);
+                    setActiveTab(tab.id);
                     if (tab.id === 'users') dispatch(userDetails());
                     if (tab.action) tab.action();
                   }}
+                  className={`
+                    flex items-center justify-center gap-2 py-2 px-4 sm:px-6 rounded-xl text-xs font-bold transition-all duration-200 whitespace-nowrap cursor-pointer select-none hover:scale-[1.03] active:scale-95
+                    ${activeTab === tab.id ? tab.color : 'text-gray-600 hover:text-gray-900 bg-gray-50/90 hover:bg-gray-100/90 border border-gray-100'}
+                  `}
                 >
-                  {activeTab === tab.id && (
-                    <motion.div
-                      layoutId="settingsTabPillMinimal"
-                      className="absolute inset-0 bg-purple-600 rounded-lg shadow-md"
-                      transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                    />
-                  )}
-                  <tab.icon size={15} className="relative z-10" />
-                  <span className="relative z-10">{tab.label}</span>
+                  <tab.icon size={15} className="sm:w-4 sm:h-4" />
+                  <span>{tab.label}</span>
                 </button>
-              ))}
-            </div>
+              </div>
+            ))}
 
-            <div className="flex items-center gap-2 ml-auto">
+            {/* Reload / Refresh Button in its own separate div */}
+            <div className="bg-white p-1 rounded-2xl border border-gray-100 shadow-sm flex items-center ml-auto">
               <button
-                onClick={handleManualRefresh}
+                type="button"
+                onClick={() => {
+                  console.log("🔄 Manual Refresh Clicked");
+                  showToast("Refreshing status...", "info");
+                  handleManualRefresh();
+                }}
                 disabled={isRefreshing}
-                className="p-2.5 rounded-lg bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 transition-all disabled:opacity-50"
+                className="py-2 px-3 sm:px-4 rounded-xl bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 hover:scale-[1.03] active:scale-95 transition-all text-xs font-bold flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-sm shadow-green-100"
                 title="Refresh Status"
               >
-                <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
+                <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
+                <span className="hidden sm:inline">Refresh</span>
               </button>
+            </div>
 
-              {(activeTab === 'users' || activeTab === 'departments' || activeTab === 'categories') && (
+            {/* Add Action Button in its own separate div */}
+            {(activeTab === 'users' || activeTab === 'departments' || activeTab === 'categories') && (
+              <div className="bg-white p-1 rounded-2xl border border-gray-100 shadow-sm flex items-center">
                 <button
+                  type="button"
                   onClick={() => {
+                    console.log(`➕ Add New Clicked for ${activeTab}`);
                     if (activeTab === 'categories') {
                       resetDeptForm();
                       setShowDeptModal(true);
@@ -1067,19 +1106,18 @@ const Setting = () => {
                       handleAddButtonClick();
                     }
                   }}
-                  className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 text-white rounded-lg font-bold shadow-md hover:bg-purple-700 transition-all text-sm"
+                  className="flex items-center gap-1.5 px-4 sm:px-6 py-2 bg-purple-600 text-white rounded-xl font-bold shadow-md shadow-purple-200 hover:bg-purple-700 hover:scale-[1.03] active:scale-95 transition-all text-xs cursor-pointer select-none"
                 >
-                  <Plus size={18} />
-                  <span className="hidden sm:inline">
+                  <Plus size={15} />
+                  <span>
                     {activeTab === 'users' ? 'New User' :
                       activeTab === 'departments' ?
                         (activeDeptSubTab === 'departments' ? 'New Department' : 'New Assign From') :
                         'New Machine'}
                   </span>
-                  <span className="sm:hidden">Add</span>
                 </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
         {/* <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md">
@@ -1538,16 +1576,41 @@ const Setting = () => {
                           </td>
 
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-col gap-1.5 items-start">
                               <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getRoleColor(user?.role)}`}>
                                 {user?.role}
                               </span>
-                              {user?.can_self_assign && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black uppercase tracking-tighter border border-indigo-100 shadow-sm animate-fade-in">
-                                  <div className="w-1 h-1 rounded-full bg-indigo-600 animate-pulse"></div>
-                                  Self-Assign
-                                </span>
-                              )}
+                              
+                              {/* Direct Interactive Toggle for Self-Assign */}
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const newStatus = !user?.can_self_assign;
+                                  console.log(`🔘 Toggling self-assign for ${user?.user_name} to ${newStatus}`);
+                                  try {
+                                    showToast(`${newStatus ? 'Enabling' : 'Disabling'} self-assign for ${user?.user_name}...`, "info");
+                                    await dispatch(updateUser({ 
+                                      id: user?.id, 
+                                      updatedUser: { ...user, can_self_assign: newStatus } 
+                                    })).unwrap();
+                                    showToast(`Self-assign ${newStatus ? 'enabled' : 'disabled'} for ${user?.user_name}`, "success");
+                                    dispatch(userDetails());
+                                  } catch (err) {
+                                    console.error("Failed to toggle self-assign:", err);
+                                    showToast("Failed to update self-assign rights", "error");
+                                  }
+                                }}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter border transition-all cursor-pointer select-none hover:scale-105 active:scale-95 ${
+                                  user?.can_self_assign 
+                                    ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-sm hover:bg-purple-100' 
+                                    : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'
+                                }`}
+                                title="Click to toggle self-assign rights directly"
+                              >
+                                <div className={`w-1.5 h-1.5 rounded-full ${user?.can_self_assign ? 'bg-purple-600 animate-pulse' : 'bg-gray-400'}`}></div>
+                                {user?.can_self_assign ? 'Self-Assign: ON' : 'Self-Assign: OFF'}
+                              </button>
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -1608,9 +1671,39 @@ const Setting = () => {
                             </div>
                             <div className="space-y-1">
                               <p className="text-[10px] text-gray-400 uppercase font-semibold">Role</p>
-                              <span className={`px-1.5 py-0.5 inline-flex text-[10px] leading-4 font-bold rounded-full uppercase ${getRoleColor(user?.role)}`}>
-                                {user?.role}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`px-1.5 py-0.5 inline-flex text-[10px] leading-4 font-bold rounded-full uppercase ${getRoleColor(user?.role)}`}>
+                                  {user?.role}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const newStatus = !user?.can_self_assign;
+                                    try {
+                                      showToast(`${newStatus ? 'Enabling' : 'Disabling'} self-assign for ${user?.user_name}...`, "info");
+                                      await dispatch(updateUser({ 
+                                        id: user?.id, 
+                                        updatedUser: { ...user, can_self_assign: newStatus } 
+                                      })).unwrap();
+                                      showToast(`Self-assign ${newStatus ? 'enabled' : 'disabled'} for ${user?.user_name}`, "success");
+                                      dispatch(userDetails());
+                                    } catch (err) {
+                                      console.error("Failed to toggle self-assign:", err);
+                                      showToast("Failed to update self-assign rights", "error");
+                                    }
+                                  }}
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter border transition-all cursor-pointer select-none active:scale-95 ${
+                                    user?.can_self_assign 
+                                      ? 'bg-purple-50 text-purple-700 border-purple-200 shadow-sm' 
+                                      : 'bg-gray-100 text-gray-500 border-gray-200'
+                                  }`}
+                                  title="Click to toggle self-assign"
+                                >
+                                  <div className={`w-1 h-1 rounded-full ${user?.can_self_assign ? 'bg-purple-600 animate-pulse' : 'bg-gray-400'}`}></div>
+                                  {user?.can_self_assign ? 'Self: ON' : 'Self: OFF'}
+                                </button>
+                              </div>
                             </div>
                           </div>
 
@@ -1676,10 +1769,12 @@ const Setting = () => {
               <div className="flex flex-col sm:flex-row gap-4 justify-between items-center text-center sm:text-left">
                 <h2 className="text-lg font-bold text-purple-700">Department Management</h2>
 
-                <div className="flex border border-purple-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                <div className="flex border border-purple-200 rounded-xl overflow-hidden bg-gray-50/80 p-1 shadow-inner gap-1">
                   <button
-                    className={`px-4 py-2 text-xs font-bold transition-all ${activeDeptSubTab === 'departments' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
+                    type="button"
+                    className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer select-none hover:scale-[1.03] active:scale-95 ${activeDeptSubTab === 'departments' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:text-purple-700 hover:bg-white'}`}
                     onClick={() => {
+                      console.log("📌 Dept SubTab Clicked: Main Departments");
                       setActiveDeptSubTab('departments');
                       dispatch(departmentDetails());
                     }}
@@ -1687,8 +1782,10 @@ const Setting = () => {
                     Main Departments
                   </button>
                   <button
-                    className={`px-4 py-2 text-xs font-bold border-l border-purple-100 transition-all ${activeDeptSubTab === 'givenBy' ? 'bg-purple-600 text-white' : 'bg-white text-purple-600 hover:bg-purple-50'}`}
+                    type="button"
+                    className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer select-none hover:scale-[1.03] active:scale-95 ${activeDeptSubTab === 'givenBy' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:text-purple-700 hover:bg-white'}`}
                     onClick={() => {
+                      console.log("📌 Dept SubTab Clicked: Assign From");
                       setActiveDeptSubTab('givenBy');
                       dispatch(givenByDetails());
                     }}
@@ -2343,26 +2440,48 @@ const Setting = () => {
 
                   </div>
                   
-                  <div className="mt-8 bg-gradient-to-br from-purple-50 to-indigo-50 p-6 rounded-[2rem] border border-purple-100/50 flex items-center justify-between group transition-all hover:shadow-xl hover:shadow-purple-100/30">
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-2xl bg-white flex items-center justify-center text-purple-600 shadow-sm border border-purple-100 group-hover:scale-110 transition-transform">
+                  {/* Self-Assign Rights in Dedicated Standalone Card */}
+                  <div 
+                    onClick={() => {
+                      const nextVal = !userForm.can_self_assign;
+                      setUserForm(prev => ({ ...prev, can_self_assign: nextVal }));
+                    }}
+                    className={`p-5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between select-none ${
+                      userForm.can_self_assign 
+                        ? 'bg-purple-50/90 border-purple-300 shadow-md shadow-purple-100/50' 
+                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all ${
+                        userForm.can_self_assign 
+                          ? 'bg-purple-600 text-white shadow-md shadow-purple-200' 
+                          : 'bg-white text-gray-400 border border-gray-200'
+                      }`}>
                         <User size={20} strokeWidth={2.5} />
                       </div>
                       <div>
-                        <h4 className="text-sm font-black text-purple-900 uppercase tracking-widest mb-0.5 group-hover:text-indigo-600 transition-colors">Self-Assign Rights</h4>
-                        <p className="text-[10px] text-gray-400 font-bold max-w-[200px]">Allow this user to assign tasks to themselves</p>
+                        <h4 className={`text-sm font-black uppercase tracking-wider mb-0.5 ${
+                          userForm.can_self_assign ? 'text-purple-900' : 'text-gray-700'
+                        }`}>
+                          Self-Assign Rights
+                        </h4>
+                        <p className="text-[11px] text-gray-500 font-medium">
+                          {userForm.can_self_assign 
+                            ? '✅ Enabled: User can assign tasks to themselves' 
+                            : '❌ Disabled: User cannot assign tasks to themselves'}
+                        </p>
                       </div>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer scale-110">
-                      <input 
-                        type="checkbox" 
-                        name="can_self_assign"
-                        checked={userForm.can_self_assign}
-                        onChange={(e) => setUserForm(prev => ({ ...prev, can_self_assign: e.target.checked }))}
-                        className="sr-only peer" 
-                      />
-                      <div className="w-12 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-purple-600 peer-checked:to-indigo-600"></div>
-                    </label>
+
+                    {/* Toggle Button */}
+                    <div 
+                      className={`w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ${
+                        userForm.can_self_assign ? 'bg-purple-600 justify-end' : 'bg-gray-300 justify-start'
+                      }`}
+                    >
+                      <div className="bg-white w-4 h-4 rounded-full shadow-md transform transition-transform" />
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-3 pt-6 border-t border-gray-50 mt-4">

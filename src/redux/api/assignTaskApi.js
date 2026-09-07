@@ -2,36 +2,41 @@ import supabase from "../../SupabaseClient";
 
 export const fetchUniqueDepartmentDataApi = async () => {
   try {
-    console.log("🔍 Fetching unique departments from users table...");
+    console.log("🔍 Fetching departments from departments table & users table...");
 
-    // Fetch all user_access values for active users
-    const { data, error } = await supabase
+    // 1. Fetch from departments table
+    const { data: deptData } = await supabase
+      .from("departments")
+      .select("name")
+      .order("name", { ascending: true });
+
+    // 2. Fetch from users table user_access
+    const { data: userData } = await supabase
       .from("users")
-      .select("user_access")
-      .eq("status", "active")
-      .not("user_access", "is", null);
+      .select("user_access, department")
+      .eq("status", "active");
 
-    if (error) throw error;
+    const deptSet = new Set();
 
-    const role = localStorage.getItem('role');
-    const userAccess = localStorage.getItem('user_access');
+    (deptData || []).forEach(d => {
+      if (d.name && d.name.trim()) deptSet.add(d.name.trim());
+    });
 
-    // Filter out nulls/empties and get unique values
-    let uniqueDepartments = [...new Set(data
-      .map(item => item.user_access)
-      .filter(dept => dept && dept.trim() !== "")
-    )].sort();
+    (userData || []).forEach(u => {
+      if (u.department && u.department.trim()) deptSet.add(u.department.trim());
+      if (u.user_access && u.user_access.trim() && u.user_access.trim().toLowerCase() !== "all") {
+        u.user_access.split(",").forEach(item => {
+          const trimmed = item.trim();
+          if (trimmed && trimmed.toLowerCase() !== "all") deptSet.add(trimmed);
+        });
+      }
+    });
 
-    // HODs should see all departments now per user request
-    // if (role === 'HOD' && userAccess && userAccess !== 'all') {
-    //   const allowedDepts = userAccess.split(',').map(d => d.trim().toLowerCase());
-    //   uniqueDepartments = uniqueDepartments.filter(d => allowedDepts.includes(d.toLowerCase()));
-    // }
-
+    const uniqueDepartments = Array.from(deptSet).sort();
     console.log("✅ Unique departments found:", uniqueDepartments);
     return uniqueDepartments;
   } catch (error) {
-    console.error("❌ Error fetching departments from users table:", error);
+    console.error("❌ Error fetching departments:", error);
     return [];
   }
 };
@@ -95,8 +100,8 @@ export const fetchUniqueDoerNameDataApi = async (department) => {
       .order("user_name", { ascending: true });
 
     if (department) {
-      // Fetch users where user_access matches or contains the department
-      query = query.ilike("user_access", `%${department}%`);
+      // Fetch users where user_access matches or contains the department, or is 'all'
+      query = query.or(`user_access.ilike.%${department}%,user_access.ilike.%all%`);
     }
 
     const { data, error } = await query;

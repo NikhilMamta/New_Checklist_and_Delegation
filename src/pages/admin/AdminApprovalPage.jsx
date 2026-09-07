@@ -97,13 +97,17 @@ export default function AdminApprovalPage() {
                 else if (activeTab === "checklist") data = await fetchChecklistHistory();
             }
 
-            // Deduplicate data to ensure each task only shows once
+            // Deduplicate data:
+            // For pending: deduplicate by task identity so multiple clicks or snapshots don't show duplicate pending approvals
+            // For history: deduplicate by done_id or id (unique completion record) so all historical completions show
             const seenIds = new Set();
-            const uniqueData = (data || []).filter(task => {
-                // Use task_id or original_task_id as the primary key for deduplication
-                const baseId = task.task_id || task.original_task_id || task.id;
-                if (!baseId || seenIds.has(baseId)) return false;
-                seenIds.add(baseId);
+            const uniqueData = (data || []).filter((task, idx) => {
+                const uniqueKey = viewMode === "pending"
+                    ? (task.task_id || task.original_task_id || task.id || `pending-${idx}`)
+                    : (task.done_id || task.id || task.task_id || `history-${idx}`);
+                
+                if (seenIds.has(uniqueKey)) return false;
+                seenIds.add(uniqueKey);
                 return true;
             });
             data = uniqueData; // Update 'data' with unique data
@@ -154,25 +158,44 @@ export default function AdminApprovalPage() {
         setSelectedTaskIds([]); // Reset selection
     }, [loadTasks]);
 
+    const filteredTasks = pendingTasks.filter(task => {
+        if (!searchTerm) return true;
+        const term = searchTerm.toLowerCase();
+        return (
+            task.doer_name?.toLowerCase().includes(term) ||
+            task.name?.toLowerCase().includes(term) ||
+            task.task_description?.toLowerCase().includes(term) ||
+            task.given_by?.toLowerCase().includes(term) ||
+            task.machine_name?.toLowerCase().includes(term) ||
+            task.issue_description?.toLowerCase().includes(term)
+        );
+    });
+
+    const paginatedTasks = filteredTasks.slice(0, visibleCount);
+    const hasMore = paginatedTasks.length < filteredTasks.length;
+
     // Intersection Observer for infinite scrolling
     useEffect(() => {
+        if (!hasMore || loading) return;
+
         const observer = new IntersectionObserver(
             (entries) => {
-                if (entries[0].isIntersecting && !loading) {
+                if (entries[0].isIntersecting) {
                     setVisibleCount((prev) => prev + 50);
                 }
             },
             { threshold: 0.1, rootMargin: '100px' }
         );
 
-        if (loadingRef.current) {
-            observer.observe(loadingRef.current);
+        const currentRef = loadingRef.current;
+        if (currentRef) {
+            observer.observe(currentRef);
         }
 
         return () => {
-            if (loadingRef.current) observer.unobserve(loadingRef.current);
+            if (currentRef) observer.unobserve(currentRef);
         };
-    }, [loading]);
+    }, [hasMore, loading]);
 
     const handleApprove = async (task) => {
         const doerName = (task.doer_name || task.name || task.filled_by || "").toLowerCase();
@@ -384,19 +407,6 @@ export default function AdminApprovalPage() {
         }
     };
 
-    const filteredTasks = pendingTasks.filter(task => {
-        if (!searchTerm) return true;
-        const term = searchTerm.toLowerCase();
-        return (
-            task.doer_name?.toLowerCase().includes(term) ||
-            task.name?.toLowerCase().includes(term) ||
-            task.task_description?.toLowerCase().includes(term) ||
-            task.given_by?.toLowerCase().includes(term) ||
-            task.machine_name?.toLowerCase().includes(term) ||
-            task.issue_description?.toLowerCase().includes(term)
-        );
-    });
-
     const formatDate = (dateStr) => {
         if (!dateStr) return "-";
         try {
@@ -416,26 +426,20 @@ export default function AdminApprovalPage() {
         }
     };
 
-    const paginatedTasks = filteredTasks.slice(0, visibleCount);
-
     return (
         <AdminLayout>
             <div className="space-y-4 sm:space-y-6">
                 {/* Sticky Header and Controls */}
-                <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-3 sm:py-6 mb-3 sm:mb-6 border-b border-gray-100/50 shadow-sm transition-all duration-300">
-                    <div className="max-w-7xl mx-auto space-y-3 sm:space-y-6">
-                        <div className="flex flex-row items-center justify-between gap-2 px-2 sm:px-0">
+                <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-md px-2 sm:px-0 py-3 sm:py-4 mb-3 sm:mb-4 border-b border-gray-100 shadow-sm transition-all duration-300">
+                    <div className="max-w-7xl mx-auto space-y-3 sm:space-y-4">
+                        <div className="flex flex-row items-center justify-between gap-2">
                             <div className="flex flex-col sm:space-y-1">
-                                <motion.div
-                                    initial={{ y: 10, opacity: 0 }}
-                                    animate={{ y: 0, opacity: 1 }}
-                                    className="flex items-center gap-2 sm:gap-4"
-                                >
+                                <div className="flex items-center gap-2 sm:gap-4">
                                     <div className="w-1 h-6 sm:w-1.5 sm:h-8 bg-purple-600 rounded-full" />
                                     <h1 className="text-xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">
                                         Admin <span className="text-purple-600">Approval</span>
                                     </h1>
-                                </motion.div>
+                                </div>
                                 <p className="text-[10px] sm:text-sm font-medium text-gray-400 ml-3 sm:ml-5 hidden sm:flex items-center gap-2">
                                     <Clock size={12} className="text-gray-300" />
                                     Review and manage user task submissions
@@ -447,12 +451,10 @@ export default function AdminApprovalPage() {
                                     <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
                                         {/* Show Approve button only for non-extended tasks or non-delegation tabs */}
                                         {(activeTab !== 'delegation' || pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend').length > 0) && (
-                                            <motion.button
-                                                initial={{ scale: 0.9, opacity: 0 }}
-                                                animate={{ scale: 1, opacity: 1 }}
+                                            <button
                                                 onClick={handleBulkApprove}
                                                 disabled={bulkProcessing}
-                                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg sm:rounded-xl shadow-lg shadow-green-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all font-inter"
+                                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-green-600 text-white rounded-lg sm:rounded-xl shadow-md shadow-green-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-green-700 disabled:opacity-50 transition-all font-inter cursor-pointer"
                                             >
                                                 {bulkProcessing ? (
                                                     <Loader2 size={12} className="animate-spin" />
@@ -460,21 +462,19 @@ export default function AdminApprovalPage() {
                                                     <CheckCircle2 size={12} className="sm:w-[14px] sm:h-[14px]" />
                                                 )}
                                                 <span className="hidden xs:inline">Approve</span> ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status !== 'extend').length})
-                                            </motion.button>
+                                            </button>
                                         )}
                                         
                                         {/* Show Remark button for extended tasks in delegation tab */}
                                         {activeTab === 'delegation' && pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend').length > 0 && (
-                                            <motion.button
-                                                initial={{ scale: 0.9, opacity: 0 }}
-                                                animate={{ scale: 1, opacity: 1 }}
+                                            <button
                                                 onClick={() => setShowBulkRemarkModal(true)}
                                                 disabled={bulkProcessing}
-                                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-purple-600 text-white rounded-lg sm:rounded-xl shadow-lg shadow-purple-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-purple-700 disabled:opacity-50 transition-all font-inter"
+                                                className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-purple-600 text-white rounded-lg sm:rounded-xl shadow-md shadow-purple-200 flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-black hover:bg-purple-700 disabled:opacity-50 transition-all font-inter cursor-pointer"
                                             >
                                                 <MessageSquare size={12} className="sm:w-[14px] sm:h-[14px]" />
                                                 <span className="hidden xs:inline">Remark</span> ({pendingTasks.filter(t => selectedTaskIds.includes(t.id) && t.status === 'extend').length})
-                                            </motion.button>
+                                            </button>
                                         )}
                                     </div>
                                 )}
@@ -487,69 +487,80 @@ export default function AdminApprovalPage() {
                             </div>
                         </div>
 
-                        <div className="bg-white/40 backdrop-blur-md rounded-xl sm:rounded-2xl p-1.5 sm:p-3 border border-gray-100/80 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
-                            {/* Tabs */}
-                            <div className="flex bg-gray-100/80 p-0.5 sm:p-1 rounded-lg sm:rounded-xl border border-gray-200/30 relative overflow-x-auto no-scrollbar max-w-full">
-                                {[
-                                    { id: 'checklist', label: 'Checklist', icon: BookCheck, color: 'bg-purple-600' },
-                                    { id: 'delegation', label: 'Delegation', icon: BookCheck, color: 'bg-indigo-600' },
-                                    { id: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'bg-blue-600' },
-                                    { id: 'repair', label: 'Repair', icon: Hammer, color: 'bg-amber-600' },
-                                    { id: 'ea', label: 'EA Tasks', icon: Briefcase, color: 'bg-emerald-600' },
-                                ].map((tab) => (
-                                    <button
-                                        key={tab.id}
-                                        onClick={() => setActiveTab(tab.id)}
-                                        className={`
-                                            relative flex items-center justify-center gap-1.5 py-1.5 px-3 sm:px-6 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-bold transition-all duration-300 whitespace-nowrap min-w-[85px] sm:min-w-[110px] z-10
-                                            ${activeTab === tab.id ? 'text-white' : 'text-gray-500 hover:text-purple-600'}
-                                        `}
-                                    >
-                                        {activeTab === tab.id && (
-                                            <motion.div
-                                                layoutId="approvalTabPillMinimal"
-                                                className={`absolute inset-0 rounded-md sm:rounded-lg shadow-md z-[-1] ${tab.color}`}
-                                                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-                                            />
-                                        )}
-                                        <tab.icon size={12} className="sm:w-[15px] sm:h-[15px]" />
-                                        <span>{tab.label}</span>
-                                    </button>
-                                ))}
+                        {/* Controls Section: Cleanly Separated Divs / Cards */}
+                        <div className="space-y-3">
+                            {/* Div 1: Category Filter Tabs Container */}
+                            <div className="w-full bg-white rounded-2xl p-2.5 sm:p-3 border border-gray-100 shadow-sm overflow-x-auto no-scrollbar">
+                                <div className="flex items-center gap-1.5 sm:gap-2 flex-nowrap min-w-max">
+                                    {[
+                                        { id: 'checklist', label: 'Checklist', icon: BookCheck, color: 'bg-purple-600 text-white shadow-md shadow-purple-200 ring-2 ring-purple-400/20' },
+                                        { id: 'delegation', label: 'Delegation', icon: BookCheck, color: 'bg-indigo-600 text-white shadow-md shadow-indigo-200 ring-2 ring-indigo-400/20' },
+                                        { id: 'maintenance', label: 'Maintenance', icon: Wrench, color: 'bg-blue-600 text-white shadow-md shadow-blue-200 ring-2 ring-blue-400/20' },
+                                        { id: 'repair', label: 'Repair', icon: Hammer, color: 'bg-amber-600 text-white shadow-md shadow-amber-200 ring-2 ring-amber-400/20' },
+                                        { id: 'ea', label: 'EA Tasks', icon: Briefcase, color: 'bg-emerald-600 text-white shadow-md shadow-emerald-200 ring-2 ring-emerald-400/20' },
+                                    ].map((tab) => (
+                                        <button
+                                            key={tab.id}
+                                            type="button"
+                                            onClick={() => {
+                                                console.log(`📌 Tab Clicked: ${tab.label} (${tab.id})`);
+                                                setActiveTab(tab.id);
+                                            }}
+                                            className={`
+                                                flex items-center justify-center gap-1.5 py-2 px-3.5 sm:px-5 rounded-xl text-[11px] sm:text-xs font-bold transition-all duration-200 whitespace-nowrap cursor-pointer select-none hover:scale-[1.03] active:scale-95
+                                                ${activeTab === tab.id ? tab.color : 'text-gray-600 hover:text-gray-900 bg-gray-50/90 hover:bg-gray-100/90 border border-gray-100'}
+                                            `}
+                                        >
+                                            <tab.icon size={14} className="sm:w-[15px] sm:h-[15px]" />
+                                            <span>{tab.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
 
-                            {/* View Mode & Search */}
-                            <div className="flex flex-row items-center gap-2 sm:gap-3 w-full lg:w-auto">
-                                <div className="flex items-center bg-gray-100 rounded-lg p-0.5 sm:p-1 border border-gray-200 shrink-0">
+                            {/* Div 2: View Mode Toggles & Search Bar in Dedicated Container */}
+                            <div className="w-full bg-white rounded-2xl p-2.5 sm:p-3 border border-gray-100 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+                                {/* Mode Toggles Div */}
+                                <div className="flex items-center bg-gray-100/90 p-1 rounded-xl border border-gray-200/60 shrink-0 gap-1.5 w-full sm:w-auto shadow-inner">
                                     <button
-                                        onClick={() => setViewMode("pending")}
-                                        className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${viewMode === "pending"
-                                            ? "bg-white text-gray-800 shadow-sm"
-                                            : "text-gray-500 hover:text-gray-700"
+                                        type="button"
+                                        onClick={() => {
+                                            console.log("🕒 ViewMode Clicked: Pending");
+                                            setViewMode("pending");
+                                        }}
+                                        className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer select-none hover:scale-[1.03] active:scale-95 ${viewMode === "pending"
+                                            ? "bg-white text-purple-700 shadow-md border border-purple-100 ring-1 ring-purple-100"
+                                            : "text-gray-500 hover:text-gray-900 hover:bg-white/60"
                                             }`}
                                     >
-                                        <Clock size={12} className="sm:w-[14px] sm:h-[14px]" />
-                                        Pending
+                                        <Clock size={14} className="sm:w-[15px] sm:h-[15px]" />
+                                        <span>Pending Approvals</span>
                                     </button>
                                     <button
-                                        onClick={() => setViewMode("history")}
-                                        className={`px-3 sm:px-4 py-1.5 rounded-md text-[10px] sm:text-xs font-bold flex items-center justify-center gap-1 sm:gap-1.5 transition-all ${viewMode === "history"
-                                            ? "bg-white text-gray-800 shadow-sm"
-                                            : "text-gray-500 hover:text-gray-700"
+                                        type="button"
+                                        onClick={() => {
+                                            console.log("📜 ViewMode Clicked: History");
+                                            setViewMode("history");
+                                        }}
+                                        className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-[11px] sm:text-xs font-bold flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer select-none hover:scale-[1.03] active:scale-95 ${viewMode === "history"
+                                            ? "bg-white text-purple-700 shadow-md border border-purple-100 ring-1 ring-purple-100"
+                                            : "text-gray-500 hover:text-gray-900 hover:bg-white/60"
                                             }`}
                                     >
-                                        <History size={12} className="sm:w-[14px] sm:h-[14px]" />
-                                        History
+                                        <History size={14} className="sm:w-[15px] sm:h-[15px]" />
+                                        <span>Approval History</span>
                                     </button>
                                 </div>
-                                <div className="relative flex-1 lg:w-64">
-                                    <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={14} />
+
+                                {/* Search Bar Div */}
+                                <div className="relative w-full sm:w-72">
+                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={15} />
                                     <input
                                         type="text"
-                                        placeholder="Search..."
+                                        placeholder="Search records..."
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full pl-8 pr-3 py-1.5 sm:py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 text-[11px] sm:text-sm font-medium shadow-none"
+                                        className="w-full pl-9 pr-4 py-2 bg-gray-50/80 border border-gray-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 text-[11px] sm:text-xs font-medium shadow-none transition-all"
                                     />
                                 </div>
                             </div>
@@ -603,8 +614,8 @@ export default function AdminApprovalPage() {
                                         </td>
                                     </tr>
                                 ) : (
-                                    paginatedTasks.map((task) => (
-                                        <tr key={task.id} className={`hover:bg-gray-50 transition-colors ${selectedTaskIds.includes(task.id) ? 'bg-purple-50/50' : ''}`}>
+                                    paginatedTasks.map((task, index) => (
+                                        <tr key={`row-${task.done_id || task.id || task.task_id}-${index}`} className={`hover:bg-gray-50 transition-colors ${selectedTaskIds.includes(task.id) ? 'bg-purple-50/50' : ''}`}>
                                             {viewMode === 'pending' && (
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <input
@@ -816,8 +827,8 @@ export default function AdminApprovalPage() {
                                 <p className="text-sm font-medium">No tasks found</p>
                             </div>
                         ) : (
-                            paginatedTasks.map((task) => (
-                                <div key={`card-${task.id}`} className={`p-4 space-y-4 hover:bg-blue-50/30 transition-colors ${selectedTaskIds.includes(task.id) ? 'bg-purple-50/80 border-l-4 border-l-purple-500' : ''}`}>
+                            paginatedTasks.map((task, index) => (
+                                <div key={`card-${task.done_id || task.id || task.task_id}-${index}`} className={`p-4 space-y-4 hover:bg-blue-50/30 transition-colors ${selectedTaskIds.includes(task.id) ? 'bg-purple-50/80 border-l-4 border-l-purple-500' : ''}`}>
                                     {/* Card Header: User & Info */}
                                     <div className="flex justify-between items-start">
                                         <div className="flex gap-3">
@@ -966,10 +977,22 @@ export default function AdminApprovalPage() {
                                             )
                                         ) : (
                                             <div className="text-center">
-                                                {task.rejection_reason ? (
-                                                    <span className="block w-full py-1.5 bg-red-50 text-red-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Rejected: {task.rejection_reason}</span>
+                                                {task.status === 'rejected' || task.rejection_reason ? (
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-100 text-red-800" title={task.rejection_reason || task.reason}>
+                                                        Rejected: {task.rejection_reason || task.reason || 'Rejected'}
+                                                    </span>
+                                                ) : task.status === 'extend' ? (
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-yellow-100 text-yellow-800">
+                                                        Extended
+                                                    </span>
+                                                ) : task.status === 'pending' ? (
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-orange-100 text-orange-800">
+                                                        Pending Approval
+                                                    </span>
                                                 ) : (
-                                                    <span className="block w-full py-1.5 bg-green-50 text-green-700 text-[10px] font-black uppercase tracking-widest rounded-lg">Approved ✅</span>
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-green-100 text-green-800">
+                                                        Approved ✅
+                                                    </span>
                                                 )}
                                             </div>
                                         )}

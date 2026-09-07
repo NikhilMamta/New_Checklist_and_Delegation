@@ -11,9 +11,7 @@ const AudioPlayer = ({ url, className = "" }) => {
 
     const cacheBustedUrl = useMemo(() => {
         if (!url) return url;
-        if (url.startsWith('blob:')) return url;
-        const separator = url.includes('?') ? '&' : '?';
-        return `${url}${separator}cb=${Date.now()}`;
+        return url;
     }, [url]);
 
     const togglePlay = (e) => {
