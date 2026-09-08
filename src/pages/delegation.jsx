@@ -258,6 +258,29 @@ function DelegationDataPage() {
 
 
 
+  const parseAnyDate = useCallback((dateVal) => {
+    if (!dateVal) return null;
+    if (dateVal instanceof Date) return isNaN(dateVal.getTime()) ? null : dateVal;
+    
+    if (typeof dateVal === "string") {
+      const cleanStr = dateVal.trim();
+      if (cleanStr.includes("/")) {
+        const datePart = cleanStr.split(" ")[0];
+        const parts = datePart.split("/");
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const year = parseInt(parts[2], 10);
+          const d = new Date(year, month, day);
+          if (!isNaN(d.getTime())) return d;
+        }
+      }
+    }
+    
+    const d = new Date(dateVal);
+    return isNaN(d.getTime()) ? null : d;
+  }, []);
+
   const filteredDelegationTasks = useMemo(() => {
     if (!delegation) return [];
 
@@ -286,9 +309,14 @@ function DelegationDataPage() {
         )
         : true;
 
+      const taskDateStr = (task.status === "extend" && task.next_extend_date)
+        ? task.next_extend_date
+        : (task.planned_date || task.task_start_date || task.date);
+      
+      const plannedDate = parseAnyDate(taskDateStr);
+
       let matchesDateFilter = true;
-      if (dateFilter !== "all" && task.planned_date) {
-        const plannedDate = new Date(task.planned_date);
+      if (dateFilter !== "all" && plannedDate) {
         plannedDate.setHours(0, 0, 0, 0);
 
         switch (dateFilter) {
@@ -297,16 +325,13 @@ function DelegationDataPage() {
             break;
           case "today":
             if (task.status === "extend") {
-              // Extended tasks show in Today until the date arrives (stays in Today on that date too)
               matchesDateFilter = plannedDate >= today;
             } else {
-              // Non-extended tasks show in Today only on the exact date
               matchesDateFilter = plannedDate.getTime() === today.getTime();
             }
             break;
           case "upcoming":
             if (task.status === "extend") {
-              // Extended tasks are already counted in Today, so exclude from Upcoming
               matchesDateFilter = false;
             } else {
               matchesDateFilter = plannedDate >= tomorrow;
@@ -319,21 +344,19 @@ function DelegationDataPage() {
 
       return matchesSearch && matchesDateFilter;
     }).map(task => {
-      let timeStatus = "Not Submitted";
+      let timeStatus = "Upcoming";
       const taskDateStr = (task.status === "extend" && task.next_extend_date)
         ? task.next_extend_date
-        : (task.planned_date || task.task_start_date);
+        : (task.planned_date || task.task_start_date || task.date);
 
-      if (taskDateStr) {
-        const pDate = new Date(taskDateStr);
+      const pDate = parseAnyDate(taskDateStr);
+
+      if (pDate) {
         pDate.setHours(0, 0, 0, 0);
 
         if (pDate < today) {
           timeStatus = "Overdue";
         } else if (pDate.getTime() === today.getTime() || (task.status === "extend" && pDate >= today)) {
-          // Keep extended tasks in "Today" if they are due today or in the future?
-          // Wait, the user said "extended but need to show that aal before upcoming task in the group of todays".
-          // This implies extended tasks should be grouped with Today.
           timeStatus = "Today";
         } else {
           timeStatus = "Upcoming";
@@ -344,7 +367,7 @@ function DelegationDataPage() {
       const priority = { "Overdue": 0, "Today": 1, "Upcoming": 2 };
       return (priority[a.timeStatus] ?? 3) - (priority[b.timeStatus] ?? 3);
     });
-  }, [delegation, debouncedSearchTerm, dateFilter, userRole, username]);
+  }, [delegation, debouncedSearchTerm, dateFilter, userRole, username, parseAnyDate]);
 
   const filteredHistoryData = useMemo(() => {
     if (!delegation_done) return [];

@@ -1,4 +1,4 @@
-import supabase from "../../SupabaseClient";
+import supabase, { uploadToSupabaseStorage } from "../../SupabaseClient";
 
 // Helper to parse JSON strings if accidentally stored as such
 const parseJsonIfNeeded = (val) => {
@@ -224,11 +224,14 @@ export const updateMaintenanceData = async (submissionData) => {
                     const file = new File([blob], item.image.name, { type: item.image.type });
                     const fileExt = item.image.name.split('.').pop();
                     const fileName = `mnt_${Date.now()}_${crypto.randomUUID()}.${fileExt}`;
-                    const { error: uploadError } = await supabase.storage.from('maintenance').upload(fileName, file);
+                    const { publicUrl, error: uploadError } = await uploadToSupabaseStorage(
+                        ['maintenance', 'checklist', 'delegation', 'tasks', 'attachments', 'public'],
+                        fileName,
+                        file
+                    );
 
-                    if (uploadError) throw uploadError;
+                    if (uploadError || !publicUrl) throw uploadError || new Error("Failed to upload to any storage bucket");
 
-                    const { data: { publicUrl } } = supabase.storage.from('maintenance').getPublicUrl(fileName);
                     imageUrl = publicUrl;
 
                 } catch (uploadError) {

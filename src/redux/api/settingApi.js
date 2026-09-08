@@ -104,12 +104,14 @@ export const createUserApi = async (newUser) => {
     const newId = lastId + 1;
 
     // Step 2: Insert user with new ID
+    const nameVal = newUser.username || newUser.user_name || "";
     const insertData = {
       id: newId,
-      user_name: newUser.username,
+      user_name: nameVal,
+      username: nameVal,
       password: newUser.password,
-      email_id: newUser.email,
-      number: newUser.phone,
+      email_id: newUser.email || newUser.email_id,
+      number: newUser.phone || newUser.number,
       employee_id: newUser.employee_id,
       role: newUser.role,
       status: newUser.status,
@@ -134,10 +136,12 @@ export const createUserApi = async (newUser) => {
       .select()
       .maybeSingle();
 
-    // Fallback if Designation column doesn't exist
-    if (error && (error.code === 'PGRST204' || error.message?.includes('Designation') || error.code === '42703')) {
-      console.warn("⚠️ Column 'Designation' likely missing, retrying without it:", error.message);
-      const { Designation, ...fallbackData } = insertData;
+    // Fallback if any column (Designation / username / user_name) doesn't exist in DB schema
+    if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message?.includes('Designation') || error.message?.includes('username'))) {
+      console.warn("⚠️ Database schema retry for user insert:", error.message);
+      const fallbackData = { ...insertData };
+      if (error.message?.includes('Designation') || error.code === '42703') delete fallbackData.Designation;
+      if (error.message?.includes('username')) delete fallbackData.username;
       const retry = await supabase.from("users").insert([fallbackData]).select().maybeSingle();
       data = retry.data;
       error = retry.error;
@@ -157,9 +161,11 @@ export const createUserApi = async (newUser) => {
 
 export const updateUserDataApi = async ({ id, updatedUser }) => {
   try {
+    const nameVal = updatedUser.user_name || updatedUser.username || "";
     // Build the update payload - NEVER include undefined values (causes Supabase 400)
     const updateData = {
-      user_name: updatedUser.user_name,
+      user_name: nameVal,
+      username: nameVal,
       email_id: updatedUser.email_id,
       number: updatedUser.number,
       employee_id: updatedUser.employee_id,
@@ -199,12 +205,11 @@ export const updateUserDataApi = async ({ id, updatedUser }) => {
       .select()
       .maybeSingle();
 
-    // If 400 error (column not found or invalid column reference)
-    // PGRST204: column not found in select
-    // 42703: column does not exist in update
-    if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message?.toLowerCase().includes('Designation'.toLowerCase()))) {
-      console.warn("⚠️ Designation update failed, retrying without Designation field. Error:", error.message);
-      const { Designation, ...fallbackData } = updateData;
+    if (error && (error.code === 'PGRST204' || error.code === '42703' || error.message?.includes('Designation') || error.message?.includes('username'))) {
+      console.warn("⚠️ Designation / username update retry. Error:", error.message);
+      const fallbackData = { ...updateData };
+      if (error.message?.includes('Designation') || error.code === '42703') delete fallbackData.Designation;
+      if (error.message?.includes('username')) delete fallbackData.username;
       const retry = await supabase.from("users").update(fallbackData).eq("id", id).select().maybeSingle();
       data = retry.data;
       error = retry.error;

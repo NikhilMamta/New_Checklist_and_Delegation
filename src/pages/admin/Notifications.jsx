@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Bell, Plus, Trash2, Shield, User, Globe, Clock, Loader2, X, CheckCheck } from "lucide-react";
 import AdminLayout from "../../components/layout/AdminLayout";
-import { fetchNotifications, createNotification, removeNotification, markAsRead } from "../../redux/slice/notificationSlice";
+import { fetchNotifications, createNotification, removeNotification, markAsRead, markAllAsRead } from "../../redux/slice/notificationSlice";
 import { useMagicToast } from "../../context/MagicToastContext";
 
 export default function Notifications() {
@@ -28,6 +28,16 @@ export default function Notifications() {
       dispatch(fetchNotifications({ role: currentUserRole, userId: currentUserId }));
     }
   }, [dispatch, currentUserRole, currentUserId]);
+
+  // Mark all unread notifications as read automatically when visiting this page
+  useEffect(() => {
+    if (list && list.length > 0 && currentUserId) {
+      const unreadIds = list.filter(n => !n.isRead).map(n => n.id);
+      if (unreadIds.length > 0) {
+        dispatch(markAllAsRead({ notificationIds: unreadIds, userId: currentUserId }));
+      }
+    }
+  }, [dispatch, list, currentUserId]);
 
   const handleCreate = async (e) => {
     e.preventDefault();

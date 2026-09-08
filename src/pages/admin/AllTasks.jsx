@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import AdminLayout from "../../components/layout/AdminLayout";
-import supabase from "../../SupabaseClient";
+import supabase, { uploadToSupabaseStorage } from "../../SupabaseClient";
 import {
   ClipboardList,
   Wrench,
@@ -697,11 +697,10 @@ const AllTasks = () => {
   const uploadFile = async (id, file) => {
     const bucketName = activeTab;
     const fileName = `${id}_${Date.now()}_${file.name}`;
-    const { data, error: uploadError } = await supabase.storage.from(bucketName).upload(fileName, file);
+    const candidateBuckets = [bucketName, 'checklist', 'delegation', 'maintenance', 'repair', 'tasks', 'attachments', 'public'];
+    const { publicUrl, error: uploadError } = await uploadToSupabaseStorage(candidateBuckets, fileName, file);
 
-    if (uploadError) throw uploadError;
-
-    const { data: { publicUrl } } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+    if (uploadError || !publicUrl) throw uploadError || new Error("Failed to upload image");
     return publicUrl;
   };
 
@@ -721,27 +720,14 @@ const AllTasks = () => {
     setIsModalOpen(true);
   };
 
-  const handleRepairUpdateSubmit = async (e) => {
-    e.preventDefault();
+  const handleRepairUpdateSubmit = async () => {
+    if (!selectedUpdateTask) return;
+
     if (!updateForm.status) return alert("Please select a status");
 
     // If status is Pending, just close modal and return (don't save/submit)
     if (updateForm.status === "Pending") {
       setIsModalOpen(false);
-      return;
-    }
-
-    // Validation for Mandatory Attachment
-    const isAttachmentRequired =
-      selectedUpdateTask.require_attachment === true ||
-      String(selectedUpdateTask.require_attachment).toLowerCase() === "yes" ||
-      String(selectedUpdateTask.require_attachment).toLowerCase() === "true" ||
-      selectedUpdateTask.attachment === true;
-
-    const isMarkedDone = ["completed", "done", "approved", "✅ completed"].some(s => updateForm.status.toLowerCase().includes(s));
-
-    if (isAttachmentRequired && isMarkedDone && !updateForm.workPhoto) {
-      showToast("Attachment required! Please upload a work photo before completing this repair.", "error");
       return;
     }
 
@@ -754,9 +740,8 @@ const AllTasks = () => {
       if (updateForm.workPhoto) {
         const fileExt = updateForm.workPhoto.name.split('.').pop();
         const fileName = `work_${selectedUpdateTask.id}_${Date.now()}.${fileExt}`;
-        const { data, error } = await supabase.storage.from('repair').upload(fileName, updateForm.workPhoto);
-        if (error) throw error;
-        const { data: { publicUrl } } = supabase.storage.from('repair').getPublicUrl(fileName);
+        const { publicUrl, error } = await uploadToSupabaseStorage(['repair', 'maintenance', 'checklist', 'tasks', 'public'], fileName, updateForm.workPhoto);
+        if (error || !publicUrl) throw error || new Error("Failed to upload work photo");
         workPhotoUrl = publicUrl;
       }
 
@@ -764,9 +749,8 @@ const AllTasks = () => {
       if (updateForm.billCopy) {
         const fileExt = updateForm.billCopy.name.split('.').pop();
         const fileName = `bill_${selectedUpdateTask.id}_${Date.now()}.${fileExt}`;
-        const { data, error } = await supabase.storage.from('repair').upload(fileName, updateForm.billCopy);
-        if (error) throw error;
-        const { data: { publicUrl } } = supabase.storage.from('repair').getPublicUrl(fileName);
+        const { publicUrl, error } = await uploadToSupabaseStorage(['repair', 'maintenance', 'checklist', 'tasks', 'public'], fileName, updateForm.billCopy);
+        if (error || !publicUrl) throw error || new Error("Failed to upload bill copy");
         billCopyUrl = publicUrl;
       }
 
@@ -1500,7 +1484,7 @@ const AllTasks = () => {
                                             <label className={`flex items-center gap-2 cursor-pointer text-xs font-medium transition-colors ${selectedItems.has(task.id) ? "text-purple-600 hover:text-purple-800" : "text-gray-400 cursor-not-allowed"}`}>
                                               <Upload className="h-3.5 w-3.5" />
                                               <span>
-                                                {uploadedImages[task.id] ? "File Selected" : <span>Upload Proof <span className="text-red-500 font-bold">*</span></span>}
+                                                {uploadedImages[task.id] ? <span className="text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">✓ {uploadedImages[task.id].name}</span> : <span>Upload Proof <span className="text-red-500 font-bold">*</span></span>}
                                               </span>
                                               <input
                                                 type="file"
@@ -1767,19 +1751,45 @@ const AllTasks = () => {
                               </div>
                               {(() => {
                                 const isReq = task.require_attachment === true || String(task.require_attachment).toLowerCase() === "yes" || String(task.require_attachment).toLowerCase() === "true" || task.attachment === true;
-                                if (!isReq && !uploadedImages[task.id]) return null;
+                                const file = uploadedImages[task.id];
+                                if (!isReq && !file) return null;
                                 return (
-                                  <div className="flex gap-2">
-                                    <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
-                                      <Upload className="h-3.5 w-3.5" />
-                                      <span>{uploadedImages[task.id] ? "Selected" : "Upload"}</span>
-                                      <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
-                                    </label>
-                                    <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95" : "border-gray-100 bg-gray-50 text-gray-400 grayscale"}`}>
-                                      <Camera className="h-3.5 w-3.5" />
-                                      <span>Photo</span>
-                                      <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
-                                    </label>
+                                  <div className="flex flex-col gap-1.5">
+                                    {file && (
+                                      <div className="flex items-center gap-2 p-1.5 bg-emerald-50 rounded-lg border border-emerald-200 shadow-sm">
+                                        {(file.type?.startsWith("image/") || file.name?.match(/\.(jpg|jpeg|png|gif|webp)$/i)) && (
+                                          <img
+                                            src={URL.createObjectURL(file)}
+                                            alt="preview"
+                                            className="w-8 h-8 rounded object-cover border border-emerald-300 flex-shrink-0"
+                                          />
+                                        )}
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                          <span className="text-[11px] font-bold text-emerald-800 truncate" title={file.name}>{file.name}</span>
+                                          <span className="text-[9px] font-bold text-emerald-600 uppercase">✓ Selected</span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() => setUploadedImages(prev => { const n = { ...prev }; delete n[task.id]; return n; })}
+                                          className="text-gray-400 hover:text-red-500 text-xs px-1 font-bold"
+                                          title="Remove file"
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    )}
+                                    <div className="flex gap-2">
+                                      <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-purple-200 bg-purple-50 text-purple-600 active:scale-95 cursor-pointer" : "border-gray-100 bg-gray-50 text-gray-400 grayscale cursor-not-allowed"}`}>
+                                        <Upload className="h-3.5 w-3.5" />
+                                        <span>{file ? "Change" : "Upload"}</span>
+                                        <input type="file" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                      </label>
+                                      <label className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md border text-xs font-medium transition-all ${selectedItems.has(task.id) ? "border-cyan-200 bg-cyan-50 text-cyan-500 active:scale-95 cursor-pointer" : "border-gray-100 bg-gray-50 text-gray-400 grayscale cursor-not-allowed"}`}>
+                                        <Camera className="h-3.5 w-3.5" />
+                                        <span>Photo</span>
+                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(task.id, e)} disabled={!selectedItems.has(task.id)} />
+                                      </label>
+                                    </div>
                                   </div>
                                 );
                               })()}
@@ -1970,19 +1980,31 @@ const AllTasks = () => {
                         ></textarea>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
-                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                          <Upload className="h-6 w-6 text-gray-400 mb-2" />
-                          <span className="text-xs font-bold text-gray-500">
+                        <label className={`flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-lg cursor-pointer transition-all ${updateForm.workPhoto ? 'bg-emerald-50 border-emerald-300' : 'border-gray-300 hover:bg-gray-50'}`}>
+                          {updateForm.workPhoto && (updateForm.workPhoto.type?.startsWith("image/") || updateForm.workPhoto.name?.match(/\.(jpg|jpeg|png|gif|webp)$/i)) ? (
+                            <img src={URL.createObjectURL(updateForm.workPhoto)} alt="Work Photo Preview" className="w-12 h-12 object-cover rounded border border-emerald-300 mb-1" />
+                          ) : (
+                            <Upload className={`h-5 w-5 mb-1 ${updateForm.workPhoto ? 'text-emerald-600' : 'text-gray-400'}`} />
+                          )}
+                          <span className="text-xs font-bold text-gray-700">
                             Photo of Work Done
                             {(selectedUpdateTask.require_attachment || selectedUpdateTask.attachment) && <span className="text-red-500 ml-1">*</span>}
                           </span>
-                          <span className="text-[10px] text-gray-400 mt-1">{updateForm.workPhoto ? updateForm.workPhoto.name : "Click to upload"}</span>
+                          <span className={`text-[10px] mt-1 font-medium truncate max-w-full px-1 ${updateForm.workPhoto ? 'text-emerald-700 font-bold' : 'text-gray-400'}`}>
+                            {updateForm.workPhoto ? `✓ ${updateForm.workPhoto.name}` : "Click to upload"}
+                          </span>
                           <input type="file" className="hidden" accept="image/*" onChange={(e) => setUpdateForm({ ...updateForm, workPhoto: e.target.files[0] })} />
                         </label>
-                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                          <Upload className="h-6 w-6 text-gray-400 mb-2" />
-                          <span className="text-xs font-bold text-gray-500">Bill Copy</span>
-                          <span className="text-[10px] text-gray-400 mt-1">{updateForm.billCopy ? updateForm.billCopy.name : "Click to upload"}</span>
+                        <label className={`flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-lg cursor-pointer transition-all ${updateForm.billCopy ? 'bg-emerald-50 border-emerald-300' : 'border-gray-300 hover:bg-gray-50'}`}>
+                          {updateForm.billCopy && (updateForm.billCopy.type?.startsWith("image/") || updateForm.billCopy.name?.match(/\.(jpg|jpeg|png|gif|webp)$/i)) ? (
+                            <img src={URL.createObjectURL(updateForm.billCopy)} alt="Bill Copy Preview" className="w-12 h-12 object-cover rounded border border-emerald-300 mb-1" />
+                          ) : (
+                            <Upload className={`h-5 w-5 mb-1 ${updateForm.billCopy ? 'text-emerald-600' : 'text-gray-400'}`} />
+                          )}
+                          <span className="text-xs font-bold text-gray-700">Bill Copy</span>
+                          <span className={`text-[10px] mt-1 font-medium truncate max-w-full px-1 ${updateForm.billCopy ? 'text-emerald-700 font-bold' : 'text-gray-400'}`}>
+                            {updateForm.billCopy ? `✓ ${updateForm.billCopy.name}` : "Click to upload"}
+                          </span>
                           <input type="file" className="hidden" accept="image/*" onChange={(e) => setUpdateForm({ ...updateForm, billCopy: e.target.files[0] })} />
                         </label>
                       </div>

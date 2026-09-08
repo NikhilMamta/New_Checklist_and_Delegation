@@ -156,7 +156,7 @@ export default function AdminLayout({ children, darkMode, toggleDarkMode, showLa
       icon: Bell,
       active: location.pathname === "/dashboard/notifications",
       showFor: ["admin", "user", "hod"],
-      badge: notifications.filter(n => !n.isRead).length || null,
+      badge: location.pathname === "/dashboard/notifications" ? null : (notifications.filter(n => !n.isRead).length || null),
     },
     {
       href: "/dashboard/quick-task",

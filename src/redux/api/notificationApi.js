@@ -19,17 +19,21 @@ export const fetchNotificationsApi = async (role, userId) => {
     if (nError) throw nError;
     if (!notifications || notifications.length === 0) return [];
 
-    // 2. Fetch read status for this user
+    // 2. Fetch read status for this user from DB and LocalStorage cache
     let readStatuses = {};
+    const localReadIds = new Set(JSON.parse(localStorage.getItem("read_notifications_ids") || "[]"));
+
     if (userId) {
+      const parsedUserId = parseInt(userId);
       const { data: readData } = await supabase
         .from("user_notifications")
         .select("notification_id, is_read")
-        .eq("user_id", userId);
+        .or(`user_id.eq.${userId}${!isNaN(parsedUserId) ? `,user_id.eq.${parsedUserId}` : ''}`);
       
       if (readData) {
         readStatuses = readData.reduce((acc, row) => {
           acc[row.notification_id] = row.is_read;
+          acc[String(row.notification_id)] = row.is_read;
           return acc;
         }, {});
       }
@@ -53,32 +57,74 @@ export const fetchNotificationsApi = async (role, userId) => {
     }
 
     // 4. Map everything
-    return notifications.map(n => ({
-      ...n,
-      isRead: !!readStatuses[n.id],
-      creator: creatorsMap[String(n.created_by)] || null
-    }));
+    return notifications.map(n => {
+      const isReadDb = !!readStatuses[n.id] || !!readStatuses[String(n.id)];
+      const isReadLocal = localReadIds.has(n.id) || localReadIds.has(String(n.id));
+      return {
+        ...n,
+        isRead: isReadDb || isReadLocal,
+        creator: creatorsMap[String(n.created_by)] || null
+      };
+    });
   } catch (error) {
     console.error("Error fetching notifications:", error);
     throw error;
   }
 };
 
+const saveLocalReadIds = (ids) => {
+  try {
+    const existing = JSON.parse(localStorage.getItem("read_notifications_ids") || "[]");
+    const updated = [...new Set([...existing, ...ids.map(String)])];
+    localStorage.setItem("read_notifications_ids", JSON.stringify(updated));
+  } catch (e) {
+    console.error("Error saving local read ids:", e);
+  }
+};
+
 export const markAsReadApi = async (notificationId, userId) => {
   try {
-    const { error } = await supabase
-      .from("user_notifications")
-      .upsert({
-        user_id: parseInt(userId),
-        notification_id: notificationId,
-        is_read: true
-      }, { onConflict: 'user_id, notification_id' });
+    saveLocalReadIds([notificationId]);
+    if (userId && !isNaN(parseInt(userId))) {
+      const { error } = await supabase
+        .from("user_notifications")
+        .upsert({
+          user_id: parseInt(userId),
+          notification_id: notificationId,
+          is_read: true
+        }, { onConflict: 'user_id, notification_id' });
 
-    if (error) throw error;
+      if (error) console.warn("Database markAsRead error:", error);
+    }
     return true;
   } catch (error) {
     console.error("Error marking as read:", error);
-    throw error;
+    return true;
+  }
+};
+
+export const markAllAsReadApi = async (notificationIds, userId) => {
+  try {
+    if (!notificationIds || notificationIds.length === 0) return true;
+    saveLocalReadIds(notificationIds);
+
+    if (userId && !isNaN(parseInt(userId))) {
+      const upserts = notificationIds.map(id => ({
+        user_id: parseInt(userId),
+        notification_id: id,
+        is_read: true
+      }));
+
+      const { error } = await supabase
+        .from("user_notifications")
+        .upsert(upserts, { onConflict: 'user_id, notification_id' });
+
+      if (error) console.warn("Database markAllAsRead error:", error);
+    }
+    return true;
+  } catch (error) {
+    console.error("Error marking all as read:", error);
+    return true;
   }
 };
 

@@ -1,6 +1,5 @@
-// delegationApiSlice.js
 import { createAsyncThunk } from '@reduxjs/toolkit';
-import supabase from '../../SupabaseClient';
+import supabase, { uploadToSupabaseStorage } from '../../SupabaseClient';
 
 export const insertDelegationDoneAndUpdate = createAsyncThunk(
   'delegation/insertDelegationDoneAndUpdate',
@@ -50,27 +49,22 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
             try {
               console.log('Uploading image for task:', taskData.id);
 
-              // Create a unique filename
               const timestamp = Date.now();
               const fileName = `delegation_${taskData.id}_${timestamp}_${taskImage.name}`;
 
-              // Upload to Supabase storage using 'checklist' bucket as 'delegation' bucket doesn't exist
-              const { data: uploadData, error: uploadError } = await supabase.storage
-                .from('checklist')
-                .upload(fileName, taskImage);
+              // Try candidates: checklist, delegation, tasks, attachments, public
+              const { publicUrl, bucket, error: uploadError } = await uploadToSupabaseStorage(
+                ['checklist', 'delegation', 'tasks', 'attachments', 'public', 'maintenance'],
+                fileName,
+                taskImage
+              );
 
-              if (uploadError) {
-                console.error('Image upload error:', uploadError);
+              if (uploadError || !publicUrl) {
+                console.error('Image upload error across buckets:', uploadError);
               } else {
-                // Get public URL from 'checklist' bucket
-                const { data: { publicUrl } } = supabase.storage
-                  .from('checklist')
-                  .getPublicUrl(fileName);
-
                 imageUrl = publicUrl;
 
                 if (doneData) {
-                  // Update delegation_done with correct column name (image_url)
                   const { error: updateImageError } = await supabase
                     .from('delegation_done')
                     .update({ image_url: imageUrl })
@@ -81,7 +75,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
                   }
                 }
 
-                console.log('Image uploaded successfully:', imageUrl);
+                console.log(`Image uploaded successfully to bucket '${bucket}':`, imageUrl);
               }
             } catch (imageError) {
               console.error('Image processing error:', imageError);

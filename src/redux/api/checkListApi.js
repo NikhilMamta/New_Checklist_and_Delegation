@@ -153,23 +153,16 @@ export const updateChecklistData = async (submissionData) => {
           const fileName = `${crypto.randomUUID()}.${fileExt}`;
           const filePath = `task-${item.taskId}/${fileName}`;
 
-          // 3. Upload to Supabase storage
-          const { error: uploadError } = await supabase.storage
-            .from('checklist')
-            .upload(filePath, file, {
-              cacheControl: '3600',
-              contentType: item.image.type,
-              upsert: false
-            });
+          // 3. Upload to Supabase storage using helper with fallbacks
+          const { uploadToSupabaseStorage } = await import("../../SupabaseClient");
+          const { publicUrl, error: uploadError } = await uploadToSupabaseStorage(
+            ['checklist', 'delegation', 'maintenance', 'repair', 'tasks', 'attachments', 'public'],
+            filePath,
+            file,
+            { cacheControl: '3600', contentType: item.image.type, upsert: false }
+          );
 
-          if (uploadError) throw uploadError;
-
-          // 4. Get public URL
-          const { data: { publicUrl } } = supabase.storage
-            .from('checklist')
-            .getPublicUrl(filePath);
-
-          if (!publicUrl) throw new Error('Failed to generate public URL');
+          if (uploadError || !publicUrl) throw uploadError || new Error('Failed to generate public URL');
 
           imageUrl = publicUrl;
           console.log('Image uploaded successfully:', imageUrl);

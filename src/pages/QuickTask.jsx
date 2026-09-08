@@ -73,6 +73,58 @@ export default function QuickTask() {
   const [doersList, setDoersList] = useState([]);
   const [customOptions, setCustomOptions] = useState([]);
 
+  const [repairTasks, setRepairTasks] = useState([]);
+  const [eaTasks, setEaTasks] = useState([]);
+  const [extraLoading, setExtraLoading] = useState(false);
+
+  const fetchRepairTasks = useCallback(async () => {
+    try {
+      setExtraLoading(true);
+      const role = (localStorage.getItem("role") || "").toLowerCase();
+      const username = localStorage.getItem("user-name");
+
+      let query = supabase.from('repair_tasks').select('*').order('created_at', { ascending: false });
+      if (role === 'user' && username) {
+        query = query.eq('name', username);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error("Error fetching repair tasks:", error);
+      } else if (data) {
+        setRepairTasks(data.map(t => ({ ...t, id: t.id || t.task_id, name: t.name || t.doer_name || '' })));
+      }
+    } catch (e) {
+      console.error("Error fetching repair tasks:", e);
+    } finally {
+      setExtraLoading(false);
+    }
+  }, []);
+
+  const fetchEATasks = useCallback(async () => {
+    try {
+      setExtraLoading(true);
+      const role = (localStorage.getItem("role") || "").toLowerCase();
+      const username = localStorage.getItem("user-name");
+
+      let query = supabase.from('ea_tasks').select('*').order('created_at', { ascending: false });
+      if (role === 'user' && username) {
+        query = query.eq('doer_name', username);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error("Error fetching EA tasks:", error);
+      } else if (data) {
+        setEaTasks(data.map(t => ({ ...t, id: t.id || t.task_id, name: t.doer_name || t.name || '' })));
+      }
+    } catch (e) {
+      console.error("Error fetching EA tasks:", e);
+    } finally {
+      setExtraLoading(false);
+    }
+  }, []);
+
   // Search and Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [freqFilter, setFreqFilter] = useState('');
@@ -147,11 +199,15 @@ export default function QuickTask() {
         dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50, dateFilter, nameFilter: searchTerm }));
       } else if (activeTab === 'maintenance') {
         dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
+      } else if (activeTab === 'repair') {
+        fetchRepairTasks();
+      } else if (activeTab === 'ea') {
+        fetchEATasks();
       }
     }, 500);
 
     return () => clearTimeout(handler);
-  }, [dispatch, activeTab, dateFilter, freqFilter, searchTerm]);
+  }, [dispatch, activeTab, dateFilter, freqFilter, searchTerm, fetchRepairTasks, fetchEATasks]);
 
 
   // Add this new function
@@ -489,7 +545,9 @@ export default function QuickTask() {
     const currentTasks =
       activeTab === 'checklist' ? filteredChecklistTasks :
         activeTab === 'maintenance' ? filteredMaintenance :
-          activeTab === 'delegation' ? filteredDelegationTasks : [];
+          activeTab === 'delegation' ? filteredDelegationTasks :
+            activeTab === 'repair' ? filteredRepairTasks :
+              activeTab === 'ea' ? filteredEATasks : [];
 
     if (selectedTasks.length === currentTasks.length && currentTasks.length > 0) {
       setSelectedTasks([]);
@@ -512,6 +570,14 @@ export default function QuickTask() {
       } else if (activeTab === 'delegation') {
         await dispatch(deleteDelegationTask(selectedTasks)).unwrap();
         dispatch(uniqueDelegationTaskData({}));
+      } else if (activeTab === 'repair') {
+        const ids = selectedTasks.map(t => t.id);
+        await supabase.from('repair_tasks').delete().in('id', ids);
+        fetchRepairTasks();
+      } else if (activeTab === 'ea') {
+        const ids = selectedTasks.map(t => t.id || t.task_id);
+        await supabase.from('ea_tasks').delete().in('id', ids);
+        fetchEATasks();
       }
       showToast(`${selectedTasks.length} task(s) deleted successfully!`, "success");
       setSelectedTasks([]);
@@ -635,9 +701,46 @@ export default function QuickTask() {
     return [...unique].sort((a, b) => {
       const dateA = new Date(a.task_start_date || 0);
       const dateB = new Date(b.task_start_date || 0);
-      return dateA - dateB;
     });
   }, [maintenance, searchTerm]);
+
+  const filteredRepairTasks = useMemo(() => {
+    const searched = repairTasks.filter(task =>
+      !searchTerm ||
+      (task.work_description || task.task_description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.machine_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.name || task.doer_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const seen = new Set();
+    const unique = searched.filter(task => {
+      const key = `${(task.machine_name || '').trim()}::${(task.work_description || task.task_description || '').trim()}::${(task.name || task.doer_name || '').trim()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return [...unique].sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+  }, [repairTasks, searchTerm]);
+
+  const filteredEATasks = useMemo(() => {
+    const searched = eaTasks.filter(task =>
+      !searchTerm ||
+      (task.task_description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.name || task.doer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (task.department || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const seen = new Set();
+    const unique = searched.filter(task => {
+      const key = `${(task.department || '').trim()}::${(task.task_description || '').trim()}::${(task.name || task.doer_name || '').trim()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return [...unique].sort((a, b) => new Date(a.planned_date || a.created_at || 0) - new Date(b.planned_date || b.created_at || 0));
+  }, [eaTasks, searchTerm]);
 
 
 
@@ -674,7 +777,11 @@ export default function QuickTask() {
                     ? `Showing ${quickTask.length} checklist tasks`
                     : activeTab === 'maintenance'
                       ? `Showing ${filteredMaintenance.length} maintenance tasks`
-                      : `Showing delegation tasks`}
+                      : activeTab === 'repair'
+                        ? `Showing ${filteredRepairTasks.length} repair tasks`
+                        : activeTab === 'ea'
+                          ? `Showing ${filteredEATasks.length} EA tasks`
+                          : `Showing delegation tasks`}
                 </p>
               </div>
 
@@ -694,7 +801,9 @@ export default function QuickTask() {
               {[
                 { id: 'checklist', label: 'Checklist' },
                 { id: 'delegation', label: 'Delegation' },
-                { id: 'maintenance', label: 'Maintenance' }
+                { id: 'maintenance', label: 'Maintenance' },
+                { id: 'repair', label: 'Repair' },
+                { id: 'ea', label: 'EA' }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -713,8 +822,12 @@ export default function QuickTask() {
                     } else if (tab.id === 'delegation') {
                       dispatch(resetDelegationPagination());
                       dispatch(uniqueDelegationTaskData({ page: 0, pageSize: 50, dateFilter }));
-                    } else {
+                    } else if (tab.id === 'maintenance') {
                       dispatch(maintenanceData({ page: 1, frequency: freqFilter, searchTerm: searchTerm }));
+                    } else if (tab.id === 'repair') {
+                      fetchRepairTasks();
+                    } else if (tab.id === 'ea') {
+                      fetchEATasks();
                     }
                   }}
                 >
@@ -1182,6 +1295,138 @@ export default function QuickTask() {
                     <div className="p-8 text-center text-gray-400 text-sm font-bold">No maintenance tasks found</div>
                   )}
                 </div>
+              </div>
+            </div>
+          ) : activeTab === 'repair' ? (
+            <div className="mt-4 rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-4">
+                <h2 className="text-purple-700 font-medium">Repair Tasks</h2>
+                <div className="flex items-center gap-2">
+                  {extraLoading && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-purple-600"></div>}
+                  <p className="text-purple-600 text-sm">Showing all repair tasks from database</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                        <input
+                          type="checkbox"
+                          checked={filteredRepairTasks.length > 0 && filteredRepairTasks.every(t => selectedTasks.find(s => s.id === t.id))}
+                          onChange={handleSelectAll}
+                          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        />
+                      </th>
+                      {[{ label: 'Actions' }, { label: 'Task ID' }, { label: 'Task Description' }, { label: 'Machine Name' }, { label: 'Assign From' }, { label: 'Name' }, { label: 'Priority' }, { label: 'Created At' }, { label: 'Status' }].map(col => (
+                        <th key={col.label} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredRepairTasks.length > 0 ? (
+                      filteredRepairTasks.map((task, index) => (
+                        <tr key={index} className={`hover:bg-gray-50 ${selectedTasks.find(t => t.id === task.id) ? "bg-purple-50" : ""}`}>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={!!selectedTasks.find(t => t.id === task.id)}
+                              onChange={() => handleCheckboxChange(task)}
+                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <button onClick={() => handleEditClick(task)} className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                              <Edit size={14} /> Edit
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.id}</td>
+                          <td className="px-6 py-4 text-sm text-gray-500">
+                            <RenderDescription text={task.work_description || task.task_description} audioUrl={task.audio_url} />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{task.machine_name || '—'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.given_by || '—'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.name || task.doer_name || '—'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.priority || 'Medium'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">{formatTimestampToDDMMYYYY(task.created_at)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span className="px-2 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">{task.status || 'Pending'}</span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={10} className="px-6 py-4 text-center text-gray-500">No repair tasks found</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : activeTab === 'ea' ? (
+            <div className="mt-4 rounded-lg border border-purple-200 shadow-md bg-white overflow-hidden">
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-b border-purple-100 p-4">
+                <h2 className="text-purple-700 font-medium">EA Tasks</h2>
+                <div className="flex items-center gap-2">
+                  {extraLoading && <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-purple-600"></div>}
+                  <p className="text-purple-600 text-sm">Showing all EA tasks from database</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                        <input
+                          type="checkbox"
+                          checked={filteredEATasks.length > 0 && filteredEATasks.every(t => selectedTasks.find(s => s.id === t.id))}
+                          onChange={handleSelectAll}
+                          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        />
+                      </th>
+                      {[{ label: 'Actions' }, { label: 'Task ID' }, { label: 'Task Description' }, { label: 'Department' }, { label: 'Assign From' }, { label: 'Name' }, { label: 'Planned Date' }, { label: 'Status' }, { label: 'Remarks' }].map(col => (
+                        <th key={col.label} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          {col.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {filteredEATasks.length > 0 ? (
+                      filteredEATasks.map((task, index) => (
+                        <tr key={index} className={`hover:bg-gray-50 ${selectedTasks.find(t => t.id === task.id) ? "bg-purple-50" : ""}`}>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={!!selectedTasks.find(t => t.id === task.id)}
+                              onChange={() => handleCheckboxChange(task)}
+                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <button onClick={() => handleEditClick(task)} className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700">
+                              <Edit size={14} /> Edit
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.id || task.task_id}</td>
+                          <td className="px-6 py-4 text-sm text-gray-500">
+                            <RenderDescription text={task.task_description} audioUrl={task.audio_url} />
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{task.department || 'EA'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.given_by || '—'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{task.name || task.doer_name || '—'}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 bg-yellow-50">{formatTimestampToDDMMYYYY(task.planned_date || task.created_at)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <span className="px-2 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">{task.status || 'Pending'}</span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-500">{task.remark || task.reason || '—'}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr><td colSpan={10} className="px-6 py-4 text-center text-gray-500">No EA tasks found</td></tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           ) : (

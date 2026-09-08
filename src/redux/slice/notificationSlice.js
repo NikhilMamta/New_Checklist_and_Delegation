@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import { fetchNotificationsApi, createNotificationApi, deleteNotificationApi, markAsReadApi } from "../api/notificationApi";
+import { fetchNotificationsApi, createNotificationApi, deleteNotificationApi, markAsReadApi, markAllAsReadApi } from "../api/notificationApi";
 
 export const fetchNotifications = createAsyncThunk(
   "notifications/fetchNotifications",
@@ -19,6 +19,18 @@ export const markAsRead = createAsyncThunk(
     try {
       await markAsReadApi(notificationId, userId);
       return notificationId;
+    } catch (error) {
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+export const markAllAsRead = createAsyncThunk(
+  "notifications/markAllAsRead",
+  async ({ notificationIds, userId }, { rejectWithValue }) => {
+    try {
+      await markAllAsReadApi(notificationIds, userId);
+      return notificationIds;
     } catch (error) {
       return rejectWithValue(error.message);
     }
@@ -81,6 +93,14 @@ const notificationSlice = createSlice({
         if (index !== -1) {
           state.list[index].isRead = true;
         }
+      })
+      .addCase(markAllAsRead.fulfilled, (state, action) => {
+        const setIds = new Set(action.payload);
+        state.list.forEach(n => {
+          if (setIds.has(n.id)) {
+            n.isRead = true;
+          }
+        });
       });
   },
 });

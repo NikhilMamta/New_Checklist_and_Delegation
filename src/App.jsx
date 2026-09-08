@@ -19,7 +19,6 @@ import MisReport from "./pages/MisReport"
 
 // --- Data & Delegation Imports ---
 import DataPage from "./pages/admin/DataPage"
-import AdminDataPage from "./pages/admin/admin-data-page"
 import AccountDataPage from "./pages/delegation"
 import AdminDelegationTask from "./pages/delegation-data"
 import AllTasks from "./pages/admin/AllTasks"
@@ -203,7 +202,7 @@ function App() {
                         path="/dashboard/admin-data"
                         element={
                             <ProtectedRoute allowedRoles={["admin", "HOD"]}>
-                                <AdminDataPage />
+                                <DataPage />
                             </ProtectedRoute>
                         }
                     />

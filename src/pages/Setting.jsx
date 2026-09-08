@@ -2334,10 +2334,13 @@ const Setting = () => {
                       >
                         <option value="">No Supervisor (Direct Admin)</option>
                         {userData && userData.length > 0 && userData
-                          .filter(u => u.user_name !== userForm.username && u.user_name !== 'admin')
-                          .map((u, i) => (
-                            <option key={i} value={u.user_name}>{u.user_name}</option>
-                          ))
+                          .filter(u => u && (u.user_name || u.username) && (u.user_name || u.username) !== userForm.username && (u.user_name || u.username) !== 'admin')
+                          .map((u, i) => {
+                            const name = u.user_name || u.username;
+                            return (
+                              <option key={i} value={name}>{name}</option>
+                            );
+                          })
                         }
                       </select>
                     </div>
