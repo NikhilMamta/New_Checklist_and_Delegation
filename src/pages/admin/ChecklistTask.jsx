@@ -534,7 +534,14 @@ export default function ChecklistTask() {
         const workingDaySet = new Set(workingData?.map(d => d.working_date) || []);
         const isHoliday = (d) => holidays.includes(getLocalDateString(d));
         const isWorkingDay = (d) => workingDaySet.has(getLocalDateString(d));
-        const toLocalISO = (d) => `${getLocalDateString(d)}T${time}:00`;
+        const toLocalISO = (d) => {
+            const offset = -new Date().getTimezoneOffset();
+            const sign = offset >= 0 ? '+' : '-';
+            const pad = (num) => String(num).padStart(2, '0');
+            const h = pad(Math.floor(Math.abs(offset) / 60));
+            const m = pad(Math.abs(offset) % 60);
+            return `${getLocalDateString(d)}T${time}:00${sign}${h}:${m}`;
+        };
         const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
 
         if (freqKey === "one-time") {
@@ -612,14 +619,12 @@ export default function ChecklistTask() {
                     }
                 }
 
-                if (t.frequency === "One Time (No Recurrence)") {
-                    const dateStr = formatDateISO(t.date);
-                    const isH = holidays.includes(dateStr);
-                    const { data: isW } = await supabase.from('working_day_calender').select('working_date').eq('working_date', dateStr).single();
+                const dateStr = formatDateISO(t.date);
+                const isH = holidays.includes(dateStr);
+                const { data: isW } = await supabase.from('working_day_calender').select('working_date').eq('working_date', dateStr).single();
 
-                    if (isH || !isW) {
-                        return { success: false, message: `Task ${i + 1}: The selected date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.` };
-                    }
+                if (isH || !isW) {
+                    return { success: false, message: `Task ${i + 1}: The selected start date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.` };
                 }
                 return { success: true };
             }));
@@ -687,23 +692,21 @@ export default function ChecklistTask() {
                 }
             }
 
-            // Holiday & Working Day check for one-time tasks (matches handlePreview validation)
-            if (t.frequency === "One Time (No Recurrence)") {
-                const dateStr = formatDateISO(t.date);
-                const isH = holidays.includes(dateStr);
+            // Holiday & Working Day check for start date (matches handlePreview validation)
+            const dateStr = formatDateISO(t.date);
+            const isH = holidays.includes(dateStr);
 
-                // Fetch working day status for this specific date
-                const { data: isW } = await supabase
-                    .from('working_day_calender')
-                    .select('working_date')
-                    .eq('working_date', dateStr)
-                    .single();
+            // Fetch working day status for this specific date
+            const { data: isW } = await supabase
+                .from('working_day_calender')
+                .select('working_date')
+                .eq('working_date', dateStr)
+                .single();
 
-                if (isH || !isW) {
-                    alert(`Task ${i + 1}: The selected date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.`);
-                    setIsSubmitting(false);
-                    return;
-                }
+            if (isH || !isW) {
+                alert(`Task ${i + 1}: The selected start date (${dateStr}) is a ${isH ? 'holiday' : 'non-working day'}. Please select a different working day.`);
+                setIsSubmitting(false);
+                return;
             }
         }
 
@@ -798,7 +801,14 @@ export default function ChecklistTask() {
                         requireAttachment: task.requireAttachment,
                         dueDate,
                         // originalStartDate = the admin-selected start date (same for all occurrences)
-                        originalStartDate: formatDateISO(task.date) + `T${task.time || "09:00"}:00`,
+                        originalStartDate: (() => {
+                            const offset = -new Date().getTimezoneOffset();
+                            const sign = offset >= 0 ? '+' : '-';
+                            const pad = (num) => String(num).padStart(2, '0');
+                            const h = pad(Math.floor(Math.abs(offset) / 60));
+                            const m = pad(Math.abs(offset) % 60);
+                            return `${formatDateISO(task.date)}T${task.time || "09:00"}:00${sign}${h}:${m}`;
+                        })(),
                         status: "pending"
                     });
                 }
