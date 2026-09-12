@@ -3,14 +3,15 @@ import React from 'react'
 import { ClipboardCheck, Hammer, Wrench, Activity, Users } from 'lucide-react'
 import { motion } from 'framer-motion'
 
-export default function TaskManagementTabs({ activeTab, setActiveTab }) {
+export default function TaskManagementTabs({ activeTab, setActiveTab, hideDelegation = false }) {
     const role = (localStorage.getItem("role") || "").toLowerCase();
     const designation = (localStorage.getItem("designation") || "").toLowerCase();
     const isMachineOperator = designation.includes("machin") || designation.includes("operat") || designation.includes("oprat");
 
     const allTabs = [
         { id: 'checklist', label: 'Checklist', icon: ClipboardCheck, color: 'text-purple-600', activeColor: 'bg-purple-600' },
-        { id: 'delegation', label: 'Delegation', icon: Users, color: 'text-teal-600', activeColor: 'bg-teal-600' },
+        // Delegation tab (conditionally hidden / commented out)
+        ...(!hideDelegation ? [{ id: 'delegation', label: 'Delegation', icon: Users, color: 'text-teal-600', activeColor: 'bg-teal-600' }] : []),
         { id: 'maintenance', label: 'Maintenance', icon: Hammer, color: 'text-blue-600', activeColor: 'bg-blue-600' },
         { id: 'repair', label: 'Repair', icon: Wrench, color: 'text-orange-600', activeColor: 'bg-orange-600' },
         { id: 'ea', label: 'EA', icon: Activity, color: 'text-green-600', activeColor: 'bg-green-600' },

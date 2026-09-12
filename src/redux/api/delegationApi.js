@@ -1,5 +1,6 @@
 import { createAsyncThunk } from '@reduxjs/toolkit';
 import supabase, { uploadToSupabaseStorage } from '../../SupabaseClient';
+import { getNowISTISOString } from '../../utils/timezoneUtils';
 
 export const insertDelegationDoneAndUpdate = createAsyncThunk(
   'delegation/insertDelegationDoneAndUpdate',
@@ -11,7 +12,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
 
       for (const taskData of selectedDataArray) {
         try {
-          // Step 1: Insert into delegation_done table
+          const nowIST = getNowISTISOString();
           const delegationDoneData = {
             task_id: taskData.id || taskData.task_id,
             status: String(taskData.status).toLowerCase() === 'done' ? 'pending' : taskData.status,
@@ -24,6 +25,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
             image_url: taskData.image || taskData.image_url, // Reverted to image_url for delegation_done table
             audio_url: taskData.audio_url || null,
             admin_done: false,
+            created_at: nowIST,
           };
 
           console.log('Inserting into delegation_done:', delegationDoneData);
@@ -84,8 +86,8 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
 
           // Step 3: Update delegation table based on status
           let delegationUpdate = {
-            updated_at: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
-            submission_date: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30'),
+            updated_at: nowIST,
+            submission_date: nowIST,
             image: imageUrl, // Keep using 'image' for delegation table as requested
             remarks: taskData.reason
           };
@@ -95,7 +97,7 @@ export const insertDelegationDoneAndUpdate = createAsyncThunk(
             delegationUpdate.admin_done = false;
           } else if (taskData.status === 'extend') {
             if (taskData.next_extend_date) {
-              delegationUpdate.planned_date = new Date(taskData.next_extend_date).toISOString();
+              delegationUpdate.planned_date = taskData.next_extend_date;
               delegationUpdate.task_start_date = delegationUpdate.planned_date;
               delegationUpdate.status = 'extend';
             }
@@ -143,14 +145,15 @@ export const fetchDelegationDataSortByDate = async () => {
       .order('planned_date', { ascending: true });
 
     if (role === 'user' && username) {
-      query = query.eq('name', username);
+      query = query.or(`name.eq.${username},given_by.eq.${username}`);
     } else if (role === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      const inList = reportingUsers.join(',');
+      query = query.or(`name.in.(${inList}),given_by.eq.${username}`);
     } else if (role === 'admin' && userAccess && userAccess !== 'all') {
       const allowedDepartments = userAccess.split(',').map(dept => dept.trim()).filter(d => d && d !== 'all');
       if (allowedDepartments.length > 0) {
@@ -169,10 +172,27 @@ export const fetchDelegationDataSortByDate = async () => {
 
 export const fetchDelegation_DoneDataSortByDate = async () => {
   try {
-    const { data, error } = await supabase
+    const role = (localStorage.getItem('role') || "").toLowerCase();
+    const username = localStorage.getItem('user-name');
+
+    let query = supabase
       .from('delegation_done')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (role === 'user' && username) {
+      query = query.or(`name.eq.${username},given_by.eq.${username}`);
+    } else if (role === 'hod' && username) {
+      const { data: reports } = await supabase
+        .from("users")
+        .select("user_name")
+        .eq("reported_by", username);
+      const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
+      const inList = reportingUsers.join(',');
+      query = query.or(`name.in.(${inList}),given_by.eq.${username}`);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
 

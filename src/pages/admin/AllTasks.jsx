@@ -1026,13 +1026,18 @@ const AllTasks = () => {
             {/* Tab System & Primary Actions */}
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3">
               <div className="flex-shrink-0">
-                <TaskManagementTabs activeTab={activeTab} setActiveTab={(newTab) => {
-                  setActiveTab(newTab);
-                  setShowHistory(false);
-                  setSelectedItems(new Set());
-                  setSearchTerm("");
-                  setDateFilter("all");
-                }} />
+                {/* Delegation tab commented out */}
+                <TaskManagementTabs
+                  activeTab={activeTab === 'delegation' ? 'checklist' : activeTab}
+                  hideDelegation={true}
+                  setActiveTab={(newTab) => {
+                    setActiveTab(newTab);
+                    setShowHistory(false);
+                    setSelectedItems(new Set());
+                    setSearchTerm("");
+                    setDateFilter("all");
+                  }}
+                />
               </div>
 
               <div className="flex flex-wrap items-center gap-2 flex-grow justify-end">

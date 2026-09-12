@@ -100,9 +100,10 @@ export const fetchDelegationData = async (page = 0, pageSize = 50, nameFilter = 
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      const inList = reportingUsers.join(',');
+      query = query.or(`name.in.(${inList}),given_by.eq.${username}`);
     } else if (role === 'user' && username) {
-      query = query.eq('name', username);
+      query = query.or(`name.eq.${username},given_by.eq.${username}`);
     }
 
     if (nameFilter) {

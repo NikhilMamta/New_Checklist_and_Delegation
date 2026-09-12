@@ -26,6 +26,7 @@ import { insertDelegationDoneAndUpdate } from "../redux/api/delegationApi";
 import { sendUrgentTaskNotification, sendTaskExtensionNotification } from "../services/whatsappService";
 import { useMagicToast } from "../context/MagicToastContext";
 import RenderDescription, { MediaViewer } from "../components/RenderDescription";
+import { formatToISTDateTime, formatToISTDate, formatToISTDisplay, ensureISTISO, getNowISTISOString } from "../utils/timezoneUtils";
 
 // Configuration object - Move all configurations here
 const CONFIG = {
@@ -106,20 +107,11 @@ function DelegationDataPage() {
   }, [dispatch]);
 
   const formatDateTimeToDDMMYYYY = useCallback((date) => {
-    const day = date.getDate().toString().padStart(2, "0");
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const year = date.getFullYear();
-    const hours = date.getHours().toString().padStart(2, "0");
-    const minutes = date.getMinutes().toString().padStart(2, "0");
-    const seconds = date.getSeconds().toString().padStart(2, "0");
-    return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+    return formatToISTDateTime(date);
   }, []);
 
   const formatDateToDDMMYYYY = useCallback((date) => {
-    const day = date.getDate().toString().padStart(2, "0");
-    const month = (date.getMonth() + 1).toString().padStart(2, "0");
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    return formatToISTDate(date);
   }, []);
 
   useEffect(() => {
@@ -219,25 +211,9 @@ function DelegationDataPage() {
 
   const formatDateTimeForDisplay = useCallback(
     (dateTimeStr) => {
-      if (!dateTimeStr) return "—";
-
-      if (
-        typeof dateTimeStr === "string" &&
-        dateTimeStr.match(/^\d{2}\/\d{2}\/\d{4}\s+\d{2}:\d{2}:\d{2}$/)
-      ) {
-        return dateTimeStr;
-      }
-
-      if (
-        typeof dateTimeStr === "string" &&
-        dateTimeStr.match(/^\d{2}\/\d{2}\/\d{4}$/)
-      ) {
-        return dateTimeStr;
-      }
-
-      return parseGoogleSheetsDateTime(dateTimeStr) || "—";
+      return formatToISTDisplay(dateTimeStr);
     },
-    [parseGoogleSheetsDateTime]
+    []
   );
 
   const parseDateFromDDMMYYYY = useCallback((dateStr) => {
@@ -291,10 +267,15 @@ function DelegationDataPage() {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     return delegation.filter((task) => {
-      const assignedUser = task.name || task.assigned_person || "";
+      const assignedUser = (task.name || task.assigned_person || "").toLowerCase();
+      const givenByUser = (task.given_by || "").toLowerCase();
+      const currentUsername = (username || "").toLowerCase();
+      const currentUserRole = (userRole || "").toLowerCase();
+
       const userMatch =
-        (userRole || "").toLowerCase() === "admin" ||
-        (assignedUser && assignedUser.toLowerCase() === (username || "").toLowerCase());
+        currentUserRole === "admin" ||
+        assignedUser === currentUsername ||
+        givenByUser === currentUsername;
 
       if (!userMatch) return false;
 
@@ -374,6 +355,18 @@ function DelegationDataPage() {
 
     return delegation_done
       .filter((item) => {
+        const assignedUser = (item.name || item.assigned_person || "").toLowerCase();
+        const givenByUser = (item.given_by || "").toLowerCase();
+        const currentUsername = (username || "").toLowerCase();
+        const currentUserRole = (userRole || "").toLowerCase();
+
+        const userMatch =
+          currentUserRole === "admin" ||
+          assignedUser === currentUsername ||
+          givenByUser === currentUsername;
+
+        if (!userMatch) return false;
+
         const matchesSearch = debouncedSearchTerm
           ? Object.values(item).some(
             (value) =>
@@ -423,7 +416,8 @@ function DelegationDataPage() {
     debouncedSearchTerm,
     startDate,
     endDate,
-    endDate,
+    userRole,
+    username,
   ]);
 
   const handlePageChange = useCallback((page) => {
@@ -692,39 +686,7 @@ function DelegationDataPage() {
 
     // Helper to ensure valid ISO timestamp for DB
     const ensureISO = (dateStr) => {
-      if (!dateStr) return null;
-
-      try {
-        // If already ISO-like (begins with 4 digits)
-        if (typeof dateStr === 'string' && /^\d{4}/.test(dateStr)) {
-          const d = new Date(dateStr);
-          return !isNaN(d.getTime()) ? d.toISOString() : null;
-        }
-
-        // If DD/MM/YYYY format
-        if (typeof dateStr === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}/.test(dateStr)) {
-          const [datePart, timePart] = dateStr.split(' ');
-          const [day, month, year] = datePart.split('/');
-
-          let hours = 0, minutes = 0, seconds = 0;
-          if (timePart) {
-            const parts = timePart.split(':');
-            hours = parseInt(parts[0] || 0, 10);
-            minutes = parseInt(parts[1] || 0, 10);
-            seconds = parseInt(parts[2] || 0, 10);
-          }
-
-          const date = new Date(year, month - 1, day, hours, minutes, seconds);
-          return !isNaN(date.getTime()) ? date.toISOString() : null;
-        }
-
-        // Try generic construction
-        const d = new Date(dateStr);
-        return !isNaN(d.getTime()) ? d.toISOString() : null;
-      } catch (e) {
-        console.warn('Date parsing error:', e);
-        return null;
-      }
+      return ensureISTISO(dateStr);
     };
 
     try {
@@ -752,7 +714,7 @@ function DelegationDataPage() {
           image_url: uploadedImages[id] ? null : item.image,
           require_attachment: item.require_attachment,
           audio_url: item.audio_url || null,
-          submission_timestamp: new Date(new Date().getTime() + (330 * 60000)).toISOString().replace('Z', '+05:30')
+          submission_timestamp: getNowISTISOString()
         };
       });
 

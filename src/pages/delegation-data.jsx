@@ -8,6 +8,7 @@ import AudioPlayer from "../components/AudioPlayer"
 import { useMagicToast } from "../context/MagicToastContext"
 
 import RenderDescription from '../components/RenderDescription';
+import { formatToISTDate } from '../utils/timezoneUtils';
 
 const isAudioUrl = (url) => {
   if (!url || typeof url !== 'string') return false;
@@ -252,18 +253,8 @@ function DelegationPage({
   };
 
   const formatDateTime = useCallback((dateStr) => {
-    if (!dateStr) return "—"
-    try {
-      const date = new Date(dateStr)
-      if (isNaN(date.getTime())) return dateStr
-      const day = date.getDate().toString().padStart(2, "0")
-      const month = (date.getMonth() + 1).toString().padStart(2, "0")
-      const year = date.getFullYear()
-      return `${day}/${month}/${year}`
-    } catch {
-      return dateStr
-    }
-  }, [])
+    return formatToISTDate(dateStr);
+  }, []);
 
   useEffect(() => {
     const role = localStorage.getItem("role")
@@ -296,6 +287,15 @@ function DelegationPage({
       filtered = filtered.filter(task => task.department?.toLowerCase().includes(departmentFilter.toLowerCase()))
     }
 
+    if (userRole && userRole.toLowerCase() !== "admin") {
+      const currentUsername = (username || "").toLowerCase();
+      filtered = filtered.filter(task => {
+        const assignedUser = (task.name || "").toLowerCase();
+        const givenByUser = (task.given_by || "").toLowerCase();
+        return assignedUser === currentUsername || givenByUser === currentUsername;
+      });
+    }
+
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
@@ -318,7 +318,7 @@ function DelegationPage({
 
       return { ...task, timeStatus };
     });
-  }, [delegationTasks, searchTerm, freqFilter, departmentFilter])
+  }, [delegationTasks, searchTerm, freqFilter, departmentFilter, userRole, username])
 
   return (
     <>

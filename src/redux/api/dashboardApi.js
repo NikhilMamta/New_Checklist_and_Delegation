@@ -34,14 +34,23 @@ export const fetchDashboardDataApi = async (
 
     // Apply role-based filtering first
     if (role === 'USER' && username) {
-      query = query.eq('name', username);
+      if (dashboardType === 'delegation') {
+        query = query.or(`name.eq.${username},given_by.eq.${username}`);
+      } else {
+        query = query.eq('name', username);
+      }
     } else if (role === 'HOD' && username) {
       const { data: reports } = await supabase
         .from("users")
         .select("user_name")
         .eq("reported_by", username);
       const reportingUsers = [username, ...(reports?.map(r => r.user_name) || [])];
-      query = query.in('name', reportingUsers);
+      if (dashboardType === 'delegation') {
+        const inList = reportingUsers.join(',');
+        query = query.or(`name.in.(${inList}),given_by.eq.${username}`);
+      } else {
+        query = query.in('name', reportingUsers);
+      }
     }
 
     // Apply department filter if provided (for checklist and delegation)
